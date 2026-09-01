@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>日报工作台</title>
+<title>工作台 · 应用中心</title>
 <style>
   :root {
     --bg: #f4f6f9; --panel: #ffffff; --panel-2: #fbfcfe;
@@ -182,6 +182,22 @@
   .md-tools button { border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); border-radius: 7px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
   .md-tools button:hover { color: var(--primary); border-color: var(--primary); }
 
+  /* 应用中心 */
+  .center-hero { background: linear-gradient(120deg,#3b6cff,#7aa0ff); border-radius: 18px; padding: 30px 30px; color: #fff; box-shadow: var(--shadow); margin-bottom: 22px; }
+  .center-hero h1 { margin: 0 0 6px; font-size: 24px; }
+  .center-hero p { margin: 0; opacity: .92; font-size: 14px; }
+  .app-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px,1fr)); gap: 20px; }
+  .app-card { background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 26px 24px; box-shadow: var(--shadow); cursor: pointer; transition: .18s; position: relative; overflow: hidden; }
+  .app-card:hover { transform: translateY(-4px); border-color: var(--primary); box-shadow: 0 14px 34px rgba(40,70,160,.14); }
+  .app-icon { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; font-size: 32px; margin-bottom: 16px; box-shadow: 0 8px 20px rgba(40,70,160,.25); }
+  .app-card.report .app-icon { background: linear-gradient(135deg,#3b6cff,#7aa0ff); }
+  .app-card.blog .app-icon { background: linear-gradient(135deg,#11b886,#37d6a4); }
+  .app-name { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
+  .app-desc { color: var(--muted); font-size: 13px; line-height: 1.7; }
+  .app-go { margin-top: 18px; color: var(--primary); font-weight: 600; font-size: 14px; }
+  .nav-back { color: var(--muted); }
+  .nav-back:hover { color: var(--primary); }
+
   /* auth */
   .auth-mask { position: fixed; inset: 0; background: linear-gradient(135deg,#eef2ff,#f6f9fc); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .auth-mask.open { display: flex; }
@@ -197,7 +213,7 @@
 </head>
 <body>
 <header class="topbar">
-  <div class="logo"><span class="dot">📋</span><span>日报工作台</span></div>
+  <div class="logo"><span class="dot">📋</span><span>工作台</span></div>
   <div class="spacer"></div>
   <div class="actions">
     <span id="netStatus" style="font-size:12px;color:var(--muted);align-self:center"><span class="net-dot"></span>已连接</span>
@@ -211,16 +227,10 @@
   </div>
 </header>
 
-<nav class="tabs">
-  <button class="tab active" data-view="home">首页</button>
-  <button class="tab" data-view="note">笔记</button>
-  <button class="tab" data-view="list">全部日报</button>
-  <button class="tab" data-view="stats">统计</button>
-  <button class="tab" data-view="week">周报</button>
-</nav>
+<nav class="tabs" id="navBar"></nav>
 
 <main>
-  <section class="view active" id="view-list">
+  <section class="view" id="view-list">
     <div class="toolbar">
       <div class="search">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
@@ -272,18 +282,25 @@
       </div>
     </div>
   </section>
-  <section class="view active" id="view-home">
-    <div class="hero">
-      <h1>📚 笔记广场</h1>
-      <p>这里汇集大家公开发布的笔记与文章——任何人都能阅读。把你的公开笔记放在简历里，世界都能看见。</p>
+  <section class="view active" id="view-center">
+    <div class="center-hero">
+      <h1>🧭 应用中心</h1>
+      <p>选择你要进入的应用。无需登录即可浏览；日报与你的私有内容登录后使用。</p>
     </div>
-    <div class="toolbar">
-      <div class="search">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-        <input id="homeSearch" placeholder="搜索公开笔记标题/摘要…">
+    <div class="app-grid" id="appGrid">
+      <div class="app-card report" data-app="report">
+        <div class="app-icon">📋</div>
+        <div class="app-name">日报工作台</div>
+        <div class="app-desc">记录每日上午 / 下午的工作，按点汇总，一键生成可汇报给领导的周报长图。</div>
+        <div class="app-go">进入 →</div>
+      </div>
+      <div class="app-card blog" data-app="blog">
+        <div class="app-icon">📚</div>
+        <div class="app-name">博客系统</div>
+        <div class="app-desc">对标 CSDN 写笔记、发文章。支持私有 / 公开，公开内容可在简历与首页广场展示。</div>
+        <div class="app-go">进入 →</div>
       </div>
     </div>
-    <div class="home-grid" id="homeGrid"></div>
   </section>
 
   <section class="view" id="view-note">
@@ -383,7 +400,7 @@
 
 <div class="auth-mask open" id="authMask">
   <div class="auth-card">
-    <div class="logo"><span class="dot">📋</span><span>日报工作台</span></div>
+    <div class="logo"><span class="dot">📋</span><span>工作台</span></div>
     <div class="auth-tabs">
       <button class="auth-tab active" data-atab="login">登录</button>
       <button class="auth-tab" data-atab="register">注册</button>
@@ -406,7 +423,6 @@
   var BLOG_API = "/api/blogs";
   var state = { reports: [], filter: { keyword: "", from: "", to: "" }, editingId: null, weekMarkdown: "", weekData: null, weekPoints: [] };
   var noteState = { list: [], filter: "mine", keyword: "", editingId: null };
-  var homeState = { list: [], keyword: "" };
 
   /* ---------- api（支持服务端 / 浏览器本地 双模式） ---------- */
   var MODE = null; // 'server' | 'local'
@@ -498,34 +514,53 @@
     return "background:"+coverGradient(b.id+b.title);
   }
 
-  /* ---------- 首页笔记广场（公开，无需登录） ---------- */
-  function loadHome(){
-    apiBlogList("public").then(function(arr){
-      homeState.list = arr || [];
-      renderHome();
-    }).catch(function(){ $("homeGrid").innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="big">⚠️</div>无法加载公开笔记，请确认服务已连接。</div>'; });
-  }
-  function renderHome(){
-    var list = homeState.list.slice();
-    var kw = homeState.keyword.toLowerCase();
-    if (kw) list = list.filter(function(b){ return (b.title||"").toLowerCase().indexOf(kw)>=0 || (b.summary||"").toLowerCase().indexOf(kw)>=0 || (b.tags||[]).join(" ").toLowerCase().indexOf(kw)>=0; });
-    if (!list.length){
-      $("homeGrid").innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="big">📝</div>还没有公开发布的笔记。去「笔记」里写一篇并设为「公开」，就会出现在首页广场。</div>';
-      return;
+  /* ---------- 应用中心 / 应用切换 ---------- */
+  var screen = "center", subView = "list";
+  function loadHome(){ loadNotes(); }
+  function makeTab(label, active, onClick){ var b=document.createElement("button"); b.className="tab"+(active?" active":""); b.textContent=label; if(onClick) b.onclick=onClick; return b; }
+  function makeBack(){ var b=document.createElement("button"); b.className="tab nav-back"; b.textContent="← 应用中心"; b.onclick=goCenter; return b; }
+  function renderNav(){
+    var nav=$("navBar"); nav.innerHTML="";
+    if (screen==="center"){ nav.appendChild(makeTab("应用中心", true, null)); updateTopbar(); return; }
+    if (screen==="report"){
+      nav.appendChild(makeBack());
+      nav.appendChild(makeTab("全部日报", subView==="list", function(){ showReport("list"); }));
+      nav.appendChild(makeTab("统计", subView==="stats", function(){ showReport("stats"); }));
+      nav.appendChild(makeTab("周报", subView==="week", function(){ showReport("week"); }));
+      updateTopbar(); return;
     }
-    $("homeGrid").innerHTML = list.map(function(b){
-      var tags=(b.tags||[]).slice(0,3).map(function(t){ return '<span class="note-tag">'+esc(t)+'</span>'; }).join("");
-      var summary = b.summary || (b.content||"").slice(0,80);
-      return '<div class="note-card" data-bid="'+b.id+'">'+
-        '<div class="note-cover" style="'+noteCover(b)+'">'+(b.category?'<span class="cat">'+esc(b.category)+'</span>':'')+'</div>'+
-        '<div class="note-body">'+
-          '<div class="note-title">'+esc(b.title)+'</div>'+
-          (summary?'<div class="note-summary">'+esc(summary)+'</div>':'')+
-          (tags?'<div class="note-tags">'+tags+'</div>':'')+
-          '<div class="note-foot"><span class="avatar">'+esc((b.authorName||"匿")[0])+'</span><span>'+esc(b.authorName||"匿名")+'</span><span>·</span><span>'+fmtDate(b.createdAt)+'</span></div>'+
-        '</div>'+
-      '</div>';
-    }).join("");
+    if (screen==="blog"){ nav.appendChild(makeBack()); nav.appendChild(makeTab("笔记", true, null)); updateTopbar(); return; }
+  }
+  function updateTopbar(){
+    var report = screen==="report";
+    if ($("btnNew")) $("btnNew").style.display = report ? "" : "none";
+    if ($("btnImport")) $("btnImport").style.display = report ? "" : "none";
+    if ($("btnExportMd")) $("btnExportMd").style.display = report ? "" : "none";
+    if ($("btnExportJson")) $("btnExportJson").style.display = report ? "" : "none";
+  }
+  function showReport(v){
+    screen="report"; subView=v;
+    $("view-center").classList.remove("active");
+    $("view-note").classList.remove("active");
+    ["list","stats","week"].forEach(function(x){ $("view-"+x).classList.toggle("active", x===v); });
+    renderNav();
+    if (v==="list") reload(); else if (v==="stats") renderStats(); else if (v==="week") renderWeekEditor();
+  }
+  function showBlog(){
+    screen="blog";
+    noteState.filter="public";
+    document.querySelectorAll("#noteSeg button").forEach(function(x){ x.classList.toggle("active", x.getAttribute("data-nf")==="public"); });
+    $("view-center").classList.remove("active");
+    ["list","stats","week"].forEach(function(x){ $("view-"+x).classList.remove("active"); });
+    $("view-note").classList.add("active");
+    renderNav(); loadNotes();
+  }
+  function goCenter(){
+    screen="center"; subView=null;
+    ["list","stats","week"].forEach(function(x){ $("view-"+x).classList.remove("active"); });
+    $("view-note").classList.remove("active");
+    $("view-center").classList.add("active");
+    renderNav();
   }
 
   /* ---------- 笔记（我的 / 公开） ---------- */
@@ -582,7 +617,7 @@
       $("blogDetailMask").classList.add("open");
       if (own){
         $("bdEdit").onclick = function(){ $("blogDetailMask").classList.remove("open"); openNoteModal(id); };
-        $("bdDel").onclick = function(){ if(confirm("确定删除这篇笔记？")){ apiBlogDelete(id).then(function(){ $("blogDetailMask").classList.remove("open"); loadNotes(); loadHome(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } };
+        $("bdDel").onclick = function(){ if(confirm("确定删除这篇笔记？")){ apiBlogDelete(id).then(function(){ $("blogDetailMask").classList.remove("open"); loadNotes(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } };
       }
       $("bdClose").onclick = function(){ $("blogDetailMask").classList.remove("open"); };
     }).catch(function(){ toast("加载失败"); });
@@ -624,7 +659,7 @@
     var p;
     if (noteState.editingId){ payload.id = noteState.editingId; p = apiBlogUpdate(payload); }
     else p = apiBlogCreate(payload);
-    p.then(function(){ $("noteModal").classList.remove("open"); loadNotes(); loadHome(); toast(noteState.editingId?"已更新":"已发布"); })
+    p.then(function(){ $("noteModal").classList.remove("open"); loadNotes(); toast(noteState.editingId?"已更新":"已发布"); })
      .catch(function(e){ toast(e.message || "操作失败"); });
   }
   /* ---------- 笔记编辑器工具栏（Markdown 快捷插入，对标 CSDN） ---------- */
@@ -1071,28 +1106,13 @@
         if (confirm("确定删除这条日报？")){ apiDelete(id).then(function(){ reload(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } return; }
     };
 
-    document.querySelectorAll(".tab").forEach(function(t){
-      t.onclick = function(){
-        var v = t.getAttribute("data-view");
-        // 日报/统计/周报 需要登录（浏览模式下拦截并提示登录）
-        if ((v==="list"||v==="stats"||v==="week") && MODE==="server" && !USER){
-          showAuth(); toast("请先登录后再使用日报功能");
-          return;
-        }
-        document.querySelectorAll(".tab").forEach(function(x){ x.classList.remove("active"); });
-        t.classList.add("active");
-        $("view-home").classList.toggle("active", v==="home");
-        $("view-note").classList.toggle("active", v==="note");
-        $("view-list").classList.toggle("active", v==="list");
-        $("view-stats").classList.toggle("active", v==="stats");
-        $("view-week").classList.toggle("active", v==="week");
-        if (v==="home") loadHome();
-        else if (v==="note") loadNotes();
-        else if (v==="stats") renderStats();
-        else if (v==="week") renderWeekEditor();
-        else if (v==="list") reload();
-      };
-    });
+    /* 应用中心：点击图标进入对应应用 */
+    $("appGrid").onclick = function(e){
+      var card = e.target.closest(".app-card"); if (!card) return;
+      var app = card.getAttribute("data-app");
+      if (app === "report") showReport("list");
+      else if (app === "blog") showBlog();
+    };
 
     $("btnExportJson").onclick = exportJSON;
     $("btnExportMd").onclick = exportMD;
@@ -1136,7 +1156,7 @@
       if (p.length < 6){ $("authErr").textContent = "密码至少 6 位"; return; }
       var fn = (authMode === "login") ? doLogin : doRegister;
       fn(u, p).then(function(){
-      hideAuth(); setNet(); reload(); loadHome(); loadNotes();
+      hideAuth(); setNet(); reload(); loadNotes(); goCenter();
       toast(authMode === "login" ? "欢迎回来" : "注册成功，开始记录吧");
       }).catch(function(e){ $("authErr").textContent = e.message || "操作失败"; });
     };
@@ -1154,9 +1174,7 @@
     $("btnLogout").onclick = logout;
     $("btnLogin").onclick = function(){ showAuth(); };
 
-    /* 首页笔记广场 */
-    $("homeSearch").oninput = function(){ homeState.keyword = this.value; renderHome(); };
-    $("homeGrid").onclick = function(e){ var c=e.target.closest(".note-card"); if(c) openNoteDetail(c.getAttribute("data-bid")); };
+    /* 笔记卡片点击在 noteList 中处理；应用中心图标点击见上方 */
 
     /* 笔记 */
     $("btnWriteNote").onclick = function(){ openNoteModal(); };
@@ -1178,7 +1196,7 @@
     $("noteList").onclick = function(e){
       var ed = e.target.closest("[data-bed]"); if (ed){ openNoteModal(ed.getAttribute("data-bed")); return; }
       var dl = e.target.closest("[data-bdel]");
-      if (dl){ var id=dl.getAttribute("data-bdel"); if(confirm("确定删除这篇笔记？")){ apiBlogDelete(id).then(function(){ loadNotes(); loadHome(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } return; }
+      if (dl){ var id=dl.getAttribute("data-bdel"); if(confirm("确定删除这篇笔记？")){ apiBlogDelete(id).then(function(){ loadNotes(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } return; }
       var card = e.target.closest(".note-card"); if (card){ openNoteDetail(card.getAttribute("data-bid")); }
     };
 
@@ -1211,17 +1229,18 @@
   //  - 网络不可达 → 本地模式（无需登录，数据存浏览器）
   apiMe().then(function(user){
     MODE = "server"; USER = user; localStorage.setItem(USER_KEY, JSON.stringify(user));
-    hideAuth(); setNet(); reload(); loadHome(); loadNotes();
+    hideAuth(); setNet(); reload(); goCenter();
   }).catch(function(err){
     if (err && err.status === 0){
-      MODE = "local"; TOKEN=null; USER=null; hideAuth(); setNet(); reload(); loadHome();
+      MODE = "local"; TOKEN=null; USER=null; hideAuth(); setNet(); reload(); goCenter();
     } else {
       MODE = "server"; TOKEN=null; USER=null;
       localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY);
-      hideAuth(); setNet(); loadHome();
-      // 未登录：笔记广场默认看「公开」笔记
+      hideAuth(); setNet();
+      // 未登录：博客系统默认看「公开」笔记
       noteState.filter = "public";
       document.querySelectorAll("#noteSeg button").forEach(function(x){ x.classList.toggle("active", x.getAttribute("data-nf")==="public"); });
+      goCenter();
     }
   });
 })();
