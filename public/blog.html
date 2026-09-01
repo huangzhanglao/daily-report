@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>博客 · 日报工作台</title>
+<style>
+  :root { --bg:#f4f6f9; --panel:#fff; --text:#1f2329; --muted:#8a9099; --primary:#3b6cff; --primary-weak:#eaf0ff; --border:#e6e8eb; --shadow:0 1px 3px rgba(20,30,50,.06),0 6px 18px rgba(20,30,50,.05); --radius:14px; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; padding:0; }
+  body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  a { color:var(--primary); text-decoration:none; }
+  .top { max-width:760px; margin:0 auto; padding:34px 20px 8px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:22px; }
+  .brand .dot { width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#3b6cff,#7aa0ff); display:grid; place-items:center; color:#fff; font-size:16px; }
+  .sub { color:var(--muted); margin:8px 0 0; font-size:13px; }
+  .hero { max-width:760px; margin:0 auto; padding:18px 20px; }
+  .hero h1 { margin:0 0 6px; font-size:26px; }
+  .hero p { margin:0; color:var(--muted); }
+  .toolbar { max-width:760px; margin:10px auto 0; padding:0 20px; }
+  .search { position:relative; }
+  .search input { width:100%; padding:11px 12px 11px 38px; border:1px solid var(--border); border-radius:12px; background:var(--panel); color:var(--text); font-size:15px; }
+  .search input:focus { outline:none; border-color:var(--primary); }
+  .search svg { position:absolute; left:12px; top:50%; transform:translateY(-50%); opacity:.45; }
+  .list { max-width:760px; margin:18px auto 60px; padding:0 20px; display:flex; flex-direction:column; gap:16px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow); cursor:pointer; transition:.15s; }
+  .card:hover { border-color:var(--primary); transform:translateY(-1px); }
+  .title { font-size:18px; font-weight:700; margin-bottom:6px; }
+  .meta { font-size:12px; color:var(--muted); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .summary { color:var(--text); opacity:.85; margin-top:10px; white-space:pre-wrap; word-break:break-word; }
+  .tags { display:inline-flex; gap:4px; flex-wrap:wrap; }
+  .tag { font-size:11px; padding:1px 9px; border-radius:20px; background:var(--primary-weak); color:var(--primary); }
+  .empty { text-align:center; padding:50px 20px; color:var(--muted); }
+  .empty .big { font-size:42px; margin-bottom:10px; }
+  /* 详情层 */
+  .mask { position:fixed; inset:0; background:rgba(15,20,30,.45); display:none; align-items:flex-start; justify-content:center; z-index:50; padding:40px 16px; overflow:auto; }
+  .mask.open { display:flex; }
+  .detail { background:var(--panel); width:100%; max-width:720px; border-radius:16px; box-shadow:0 20px 60px rgba(0,0,0,.25); padding:26px 28px; }
+  .detail h2 { margin:0 0 8px; font-size:22px; }
+  .detail .d-meta { font-size:12px; color:var(--muted); margin-bottom:16px; }
+  .detail .d-content { white-space:pre-wrap; word-break:break-word; line-height:1.85; font-size:15px; }
+  .detail .d-foot { margin-top:20px; text-align:right; }
+  .btn { border:1px solid var(--border); background:var(--panel); color:var(--text); padding:7px 16px; border-radius:9px; font-size:13px; cursor:pointer; }
+  .btn.primary { background:var(--primary); border-color:var(--primary); color:#fff; }
+  .x { float:right; border:none; background:none; font-size:24px; color:var(--muted); cursor:pointer; line-height:1; }
+</style>
+</head>
+<body>
+  <div class="top">
+    <div class="brand"><span class="dot">📋</span><span>日报工作台 · 博客</span></div>
+    <p class="sub">团队/个人的公开博客空间</p>
+  </div>
+
+  <div class="toolbar">
+    <div class="search">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <input id="search" placeholder="搜索博客标题/摘要…">
+    </div>
+  </div>
+
+  <div class="list" id="list"></div>
+
+  <div class="mask" id="mask">
+    <div class="detail">
+      <button class="x" id="closeBtn">×</button>
+      <h2 id="dTitle"></h2>
+      <div class="d-meta" id="dMeta"></div>
+      <div class="d-content" id="dContent"></div>
+      <div class="d-foot"><button class="btn primary" id="closeBtn2">关闭</button></div>
+    </div>
+  </div>
+
+<script>
+(function(){
+  "use strict";
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function fmt(ts){ if(!ts) return ""; var d=new Date(ts); var p=function(n){return (n<10?"0":"")+n;}; return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); }
+  var list=[], kw="";
+  function load(){
+    fetch("/api/blogs").then(function(r){ return r.json(); }).then(function(arr){
+      list = arr||[];
+      render();
+    }).catch(function(){
+      $("list").innerHTML = '<div class="empty"><div class="big">⚠️</div>无法连接博客服务，请确认服务端已启动。</div>';
+    });
+  }
+  function render(){
+    var items = list.slice();
+    var q = kw.toLowerCase();
+    if (q) items = items.filter(function(b){ return (b.title||"").toLowerCase().indexOf(q)>=0 || (b.summary||"").toLowerCase().indexOf(q)>=0; });
+    if (!items.length){
+      $("list").innerHTML = '<div class="empty"><div class="big">📝</div>还没有博客文章。</div>';
+      return;
+    }
+    $("list").innerHTML = items.map(function(b){
+      var tags=(b.tags||[]).map(function(t){ return '<span class="tag">'+esc(t)+'</span>'; }).join("");
+      return '<div class="card" data-id="'+b.id+'">'+
+        '<div class="title">'+esc(b.title)+'</div>'+
+        '<div class="meta"><span>✍️ '+esc(b.authorName||"匿名")+'</span><span>·</span><span>'+fmt(b.createdAt)+'</span>'+(tags?('<span class="tags">'+tags+'</span>'):'')+'</div>'+
+        (b.summary?'<div class="summary">'+esc(b.summary)+'</div>':'')+
+      '</div>';
+    }).join("");
+  }
+  function openDetail(id){
+    fetch("/api/blogs/"+id).then(function(r){ return r.json(); }).then(function(b){
+      $("dTitle").textContent = b.title||"无标题";
+      var tags=(b.tags||[]).map(function(t){ return '<span class="tag">'+esc(t)+'</span>'; }).join(" ");
+      $("dMeta").innerHTML = '✍️ '+esc(b.authorName||"匿名")+'　·　'+fmt(b.createdAt)+(tags?('　·　'+tags):'');
+      $("dContent").textContent = b.content||"";
+      $("mask").classList.add("open");
+    }).catch(function(){ alert("加载失败"); });
+  }
+  $("search").oninput = function(){ kw=this.value; render(); };
+  $("list").onclick = function(e){ var c=e.target.closest(".card"); if(c) openDetail(c.getAttribute("data-id")); };
+  $("closeBtn").onclick = function(){ $("mask").classList.remove("open"); };
+  $("closeBtn2").onclick = function(){ $("mask").classList.remove("open"); };
+  $("mask").onclick = function(e){ if(e.target===$("mask")) $("mask").classList.remove("open"); };
+  load();
+})();
+</script>
+</body>
+</html>

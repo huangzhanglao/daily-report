@@ -139,6 +139,18 @@
   .footer-note { text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
   .img-preview { max-width: 100%; border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; }
 
+  /* blog */
+  .blog-card { cursor: pointer; transition: .15s; }
+  .blog-card:hover { border-color: var(--primary); }
+  .blog-title { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .blog-meta { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .blog-summary { color: var(--text); opacity: .85; margin-top: 8px; white-space: pre-wrap; word-break: break-word; }
+  .blog-tags { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+  .blog-tag { font-size: 11px; padding: 1px 8px; border-radius: 20px; background: var(--primary-weak); color: var(--primary); }
+  .bd-meta { font-size: 12px; color: var(--muted); margin-bottom: 12px; }
+  .bd-content { white-space: pre-wrap; word-break: break-word; line-height: 1.8; font-size: 14px; }
+  .bf-active { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
+
   /* auth */
   .auth-mask { position: fixed; inset: 0; background: linear-gradient(135deg,#eef2ff,#f6f9fc); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .auth-mask.open { display: flex; }
@@ -171,6 +183,7 @@
   <button class="tab active" data-view="list">全部日报</button>
   <button class="tab" data-view="stats">统计</button>
   <button class="tab" data-view="week">周报</button>
+  <button class="tab" data-view="blog">博客</button>
 </nav>
 
 <main>
@@ -226,6 +239,20 @@
       </div>
     </div>
   </section>
+  <section class="view" id="view-blog">
+    <div class="toolbar">
+      <div class="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="blogSearch" placeholder="搜索博客标题/正文…">
+      </div>
+      <div class="filter-date" style="gap:6px">
+        <button class="btn ghost bf-active" data-bf="all">全部</button>
+        <button class="btn ghost" data-bf="mine">我的</button>
+      </div>
+      <button class="btn primary" id="btnWriteBlog">+ 写博客</button>
+    </div>
+    <div class="cards" id="blogList"></div>
+  </section>
 </main>
 
 <div class="modal-mask" id="modalMask">
@@ -256,6 +283,34 @@
   </div>
 </div>
 
+<div class="modal-mask" id="blogModal">
+  <div class="modal">
+    <div class="modal-head"><h2 id="blogModalTitle">写博客</h2><button class="x" id="blogModalClose">×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>标题</label><input id="bTitle" placeholder="博客标题"></div>
+      <div class="field"><label>摘要（列表卡片显示，可选）</label><input id="bSummary" placeholder="一句话摘要"></div>
+      <div class="field"><label>标签（逗号分隔，可选）</label><input id="bTags" placeholder="前端, Node, 心得"></div>
+      <div class="field"><label>正文</label><textarea id="bContent" placeholder="写下你的博客内容，支持换行"></textarea></div>
+      <div class="hint">博客是共享的，所有访问者（含未登录访客）都能看到。作者记录为当前登录账号，只有你能编辑/删除自己的博客。</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="blogCancel">取消</button>
+      <button class="btn primary" id="blogSave">发布</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="blogDetailMask">
+  <div class="modal">
+    <div class="modal-head"><h2 id="bdTitle"></h2><button class="x" id="blogDetailClose">×</button></div>
+    <div class="modal-body">
+      <div class="bd-meta" id="bdMeta"></div>
+      <div class="bd-content" id="bdContent"></div>
+    </div>
+    <div class="modal-foot" id="blogDetailFoot"></div>
+  </div>
+</div>
+
 <input type="file" id="fileInput" accept="application/json" style="display:none">
 
 <div class="auth-mask open" id="authMask">
@@ -280,7 +335,9 @@
 (function(){
   "use strict";
   var API = "/api/reports";
+  var BLOG_API = "/api/blogs";
   var state = { reports: [], filter: { keyword: "", from: "", to: "" }, editingId: null, weekMarkdown: "", weekData: null, weekPoints: [] };
+  var blogState = { list: [], filter: "all", keyword: "", editingId: null };
 
   /* ---------- api（支持服务端 / 浏览器本地 双模式） ---------- */
   var MODE = null; // 'server' | 'local'
@@ -342,6 +399,111 @@
         .then(function(data){ resolve(data.user); })
         .catch(function(err){ if (err && err.status) return reject(err); return reject({ status: 0 }); });
     });
+  }
+
+  /* ---------- 博客 API ---------- */
+  function apiBlogList(){ return fetch(BLOG_API).then(function(r){ if(!r.ok) throw 0; return r.json(); }); }
+  function apiBlogGet(id){ return fetch(BLOG_API+"/"+id).then(function(r){ if(!r.ok) throw 0; return r.json(); }); }
+  function apiBlogCreate(b){
+    return fetch(BLOG_API, { method:"POST", headers:Object.assign({"Content-Type":"application/json"}, authHeader()), body: JSON.stringify(b) })
+      .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||"发布失败"); return d; }); });
+  }
+  function apiBlogUpdate(b){
+    return fetch(BLOG_API+"/"+b.id, { method:"PUT", headers:Object.assign({"Content-Type":"application/json"}, authHeader()), body: JSON.stringify(b) })
+      .then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.error||"更新失败"); return d; }); });
+  }
+  function apiBlogDelete(id){
+    return fetch(BLOG_API+"/"+id, { method:"DELETE", headers: authHeader() })
+      .then(function(r){ if(!r.ok) throw 0; return r.json(); });
+  }
+
+  /* ---------- 博客渲染 ---------- */
+  function loadBlogs(){
+    if (MODE !== "server"){ $("blogList").innerHTML = '<div class="empty"><div class="big">🌐</div>博客是共享功能，需要连接到服务端才能使用。<br>请启动/连接本地服务，或部署到你的云服务器。</div>'; return; }
+    apiBlogList().then(function(arr){
+      blogState.list = arr || [];
+      renderBlogList();
+    }).catch(function(){ $("blogList").innerHTML = '<div class="empty"><div class="big">⚠️</div>无法加载博客，请确认服务已连接。</div>'; });
+  }
+  function fmtDate(ts){
+    if (!ts) return "";
+    var d = new Date(ts); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+  }
+  function renderBlogList(){
+    var list = blogState.list.slice();
+    if (blogState.filter === "mine"){
+      if (!USER){ $("blogList").innerHTML = '<div class="empty"><div class="big">🔒</div>请先登录后查看「我的博客」。</div>'; return; }
+      list = list.filter(function(b){ return b.authorId === USER.id; });
+    }
+    var kw = blogState.keyword.toLowerCase();
+    if (kw){
+      list = list.filter(function(b){
+        return (b.title||"").toLowerCase().indexOf(kw)>=0 || (b.summary||"").toLowerCase().indexOf(kw)>=0;
+      });
+    }
+    if (!list.length){
+      $("blogList").innerHTML = '<div class="empty"><div class="big">📝</div>'+(blogState.filter==="mine"?"你还没有发布过博客。":"还没有博客，点右上角「+ 写博客」发布第一篇吧。")+'</div>';
+      return;
+    }
+    var html = list.map(function(b){
+      var tags = (b.tags||[]).map(function(t){ return '<span class="blog-tag">'+esc(t)+'</span>'; }).join("");
+      var own = USER && b.authorId === USER.id;
+      return '<div class="card blog-card" data-bid="'+b.id+'">'+
+        '<div class="blog-title">'+esc(b.title)+'</div>'+
+        '<div class="blog-meta"><span>✍️ '+esc(b.authorName||"匿名")+'</span><span>·</span><span>'+fmtDate(b.createdAt)+'</span>'+
+          (tags?('<span class="blog-tags">'+tags+'</span>'):'')+'</div>'+
+        (b.summary?'<div class="blog-summary">'+esc(b.summary)+'</div>':'')+
+        (own?'<div style="margin-top:10px"><button class="iconbtn" data-bed="'+b.id+'">编辑</button><button class="iconbtn" data-bdel="'+b.id+'">删除</button></div>':'')+
+      '</div>';
+    }).join("");
+    $("blogList").innerHTML = html;
+  }
+  function openBlogDetail(id){
+    apiBlogGet(id).then(function(b){
+      $("bdTitle").textContent = b.title || "无标题";
+      var tags = (b.tags||[]).map(function(t){ return '<span class="blog-tag">'+esc(t)+'</span>'; }).join(" ");
+      $("bdMeta").innerHTML = '✍️ '+esc(b.authorName||"匿名")+'　·　'+fmtDate(b.createdAt) + (tags?('　·　'+tags):'');
+      $("bdContent").textContent = b.content || "";
+      var own = USER && b.authorId === USER.id;
+      $("blogDetailFoot").innerHTML = own
+        ? '<button class="btn ghost" id="bdEdit">编辑</button><button class="btn ghost" id="bdDel">删除</button><button class="btn primary" id="bdClose">关闭</button>'
+        : '<button class="btn primary" id="bdClose">关闭</button>';
+      $("blogDetailMask").classList.add("open");
+      if (own){
+        $("bdEdit").onclick = function(){ $("blogDetailMask").classList.remove("open"); openBlogModal(id); };
+        $("bdDel").onclick = function(){ if(confirm("确定删除这篇博客？")){ apiBlogDelete(id).then(function(){ $("blogDetailMask").classList.remove("open"); loadBlogs(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } };
+      }
+      $("bdClose").onclick = function(){ $("blogDetailMask").classList.remove("open"); };
+    }).catch(function(){ toast("加载失败"); });
+  }
+  function openBlogModal(id){
+    if (MODE !== "server"){ toast("博客需连接服务端"); return; }
+    if (!USER){ showAuth(); toast("请先登录后再写博客"); return; }
+    blogState.editingId = id || null;
+    $("blogModalTitle").textContent = id ? "编辑博客" : "写博客";
+    if (id){
+      var b = blogState.list.find(function(x){ return x.id===id; });
+      if (!b) return;
+      $("bTitle").value = b.title || ""; $("bSummary").value = b.summary || "";
+      $("bTags").value = (b.tags||[]).join(", "); $("bContent").value = b.content || "";
+    } else {
+      $("bTitle").value=""; $("bSummary").value=""; $("bTags").value=""; $("bContent").value="";
+    }
+    $("blogModal").classList.add("open");
+    setTimeout(function(){ $("bTitle").focus(); }, 50);
+  }
+  function saveBlog(){
+    var title = $("bTitle").value.trim();
+    var content = $("bContent").value.trim();
+    if (!title){ toast("标题不能为空"); return; }
+    if (!content){ toast("正文不能为空"); return; }
+    var tags = $("bTags").value.split(",").map(function(t){ return t.trim(); }).filter(Boolean);
+    var payload = { title:title, summary:$("bSummary").value.trim(), content:content, tags:tags };
+    var p;
+    if (blogState.editingId){ payload.id = blogState.editingId; p = apiBlogUpdate(payload); }
+    else p = apiBlogCreate(payload);
+    p.then(function(){ $("blogModal").classList.remove("open"); loadBlogs(); toast(blogState.editingId?"已更新":"已发布"); })
+     .catch(function(e){ toast(e.message || "操作失败"); });
   }
   function doLogin(username, password){
     return fetch("/api/auth/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({username:username,password:password}) })
@@ -778,8 +940,10 @@
         $("view-list").classList.toggle("active", v==="list");
         $("view-stats").classList.toggle("active", v==="stats");
         $("view-week").classList.toggle("active", v==="week");
+        $("view-blog").classList.toggle("active", v==="blog");
         if (v==="stats") renderStats();
         if (v==="week") renderWeekEditor();
+        if (v==="blog") loadBlogs();
       };
     });
 
@@ -825,8 +989,8 @@
       if (p.length < 6){ $("authErr").textContent = "密码至少 6 位"; return; }
       var fn = (authMode === "login") ? doLogin : doRegister;
       fn(u, p).then(function(){
-        hideAuth(); setNet(); reload();
-        toast(authMode === "login" ? "欢迎回来" : "注册成功，开始记录吧");
+      hideAuth(); setNet(); reload(); loadBlogs();
+      toast(authMode === "login" ? "欢迎回来" : "注册成功，开始记录吧");
       }).catch(function(e){ $("authErr").textContent = e.message || "操作失败"; });
     };
     $("authUser").addEventListener("keydown", function(e){ if (e.key === "Enter") $("authPwd").focus(); });
@@ -841,6 +1005,30 @@
       };
     });
     $("btnLogout").onclick = logout;
+
+    /* 博客 */
+    $("btnWriteBlog").onclick = function(){ openBlogModal(); };
+    $("blogSave").onclick = saveBlog;
+    $("blogCancel").onclick = function(){ $("blogModal").classList.remove("open"); };
+    $("blogModalClose").onclick = function(){ $("blogModal").classList.remove("open"); };
+    $("blogModal").onclick = function(e){ if (e.target === $("blogModal")) $("blogModal").classList.remove("open"); };
+    $("blogDetailClose").onclick = function(){ $("blogDetailMask").classList.remove("open"); };
+    $("blogDetailMask").onclick = function(e){ if (e.target === $("blogDetailMask")) $("blogDetailMask").classList.remove("open"); };
+    $("blogSearch").oninput = function(){ blogState.keyword = this.value; renderBlogList(); };
+    document.querySelectorAll("[data-bf]").forEach(function(b){
+      b.onclick = function(){
+        document.querySelectorAll("[data-bf]").forEach(function(x){ x.classList.remove("bf-active"); });
+        b.classList.add("bf-active");
+        blogState.filter = b.getAttribute("data-bf");
+        renderBlogList();
+      };
+    });
+    $("blogList").onclick = function(e){
+      var ed = e.target.closest("[data-bed]"); if (ed){ openBlogModal(ed.getAttribute("data-bed")); return; }
+      var dl = e.target.closest("[data-bdel]");
+      if (dl){ var id=dl.getAttribute("data-bdel"); if(confirm("确定删除这篇博客？")){ apiBlogDelete(id).then(function(){ loadBlogs(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } return; }
+      var card = e.target.closest(".blog-card"); if (card){ openBlogDetail(card.getAttribute("data-bid")); }
+    };
   }
   function fallbackCopy(){
     var ta=document.createElement("textarea"); ta.value=state.weekMarkdown; document.body.appendChild(ta); ta.select();

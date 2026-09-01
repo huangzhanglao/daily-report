@@ -4,3 +4,7 @@ data/
 *.log
 .DS_Store
 .workbuddy/
+
+# 临时校验/测试产物
+._c.js
+_test_*.js

@@ -15,12 +15,14 @@ const PUBLIC_DIR = path.join(ROOT, "public");
 const DATA_DIR = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : path.join(ROOT, "data");
 const DATA_FILE = path.join(DATA_DIR, "reports.json");
 const USERS_FILE = path.join(DATA_DIR, "users.json");
+const BLOGS_FILE = path.join(DATA_DIR, "blogs.json");
 const SECRET_FILE = path.join(DATA_DIR, ".secret");
 
 function ensureStore() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, "[]");
   if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, "[]");
+  if (!fs.existsSync(BLOGS_FILE)) fs.writeFileSync(BLOGS_FILE, "[]");
   if (!fs.existsSync(SECRET_FILE)) fs.writeFileSync(SECRET_FILE, crypto.randomBytes(32).toString("hex"));
 }
 function readAll() {
@@ -33,6 +35,11 @@ function readUsers() {
   catch (e) { return []; }
 }
 function writeUsers(arr) { fs.writeFileSync(USERS_FILE, JSON.stringify(arr, null, 2)); }
+function readBlogs() {
+  try { return JSON.parse(fs.readFileSync(BLOGS_FILE, "utf8")) || []; }
+  catch (e) { return []; }
+}
+function writeBlogs(arr) { fs.writeFileSync(BLOGS_FILE, JSON.stringify(arr, null, 2)); }
 function getSecret() { try { return fs.readFileSync(SECRET_FILE, "utf8").trim(); } catch (e) { return "dev-secret"; } }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
@@ -131,6 +138,80 @@ function handleAuth(req, res, url, body) {
   return sendJSON(res, 404, { error: "unknown auth endpoint" });
 }
 
+/* ---------- 博客接口（列表/详情公开；写/改/删需登录且仅限本人） ---------- */
+function blogPublic(b) {
+  return {
+    id: b.id, title: b.title, summary: b.summary || "",
+    tags: b.tags || [], authorId: b.authorId, authorName: b.authorName,
+    createdAt: b.createdAt, updatedAt: b.updatedAt
+  };
+}
+function handleBlogs(req, res, url) {
+  // 列表（公开，无需登录）
+  if (req.method === "GET" && url === "/api/blogs") {
+    const list = readBlogs().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).map(blogPublic);
+    return sendJSON(res, 200, list);
+  }
+  // 单篇（公开，无需登录）
+  const m = url.match(/^\/api\/blogs\/([\w\-]+)$/);
+  if (m) {
+    const id = m[1];
+    if (req.method === "GET") {
+      const b = readBlogs().find(function (x) { return x.id === id; });
+      if (!b) return sendJSON(res, 404, { error: "not found" });
+      return sendJSON(res, 200, b);
+    }
+    // PUT / DELETE 需要登录且只能操作自己的
+    const uidv = getUser(req);
+    if (!uidv) return sendJSON(res, 401, { error: "未登录" });
+    const u = readUsers().find(function (x) { return x.id === uidv; });
+    if (!u) return sendJSON(res, 401, { error: "用户不存在" });
+    const blogs = readBlogs();
+    const idx = blogs.findIndex(function (x) { return x.id === id; });
+    if (idx < 0) return sendJSON(res, 404, { error: "not found" });
+    if (blogs[idx].authorId !== uidv) return sendJSON(res, 403, { error: "只能修改/删除自己的博客" });
+    if (req.method === "DELETE") {
+      writeBlogs(blogs.filter(function (x) { return x.id !== id; }));
+      return sendJSON(res, 200, { ok: true });
+    }
+    if (req.method === "PUT") {
+      return readBody(req, function (body) {
+        const b = blogs[idx];
+        if (body.title != null) b.title = (body.title || "").trim() || b.title;
+        if (body.summary != null) b.summary = (body.summary || "").trim();
+        if (body.content != null) b.content = body.content;
+        if (body.tags != null) b.tags = Array.isArray(body.tags) ? body.tags.map(function (t) { return (t || "").trim(); }).filter(Boolean) : b.tags;
+        b.updatedAt = Date.now();
+        writeBlogs(blogs);
+        sendJSON(res, 200, b);
+      });
+    }
+  }
+  // 创建（需要登录）
+  if (req.method === "POST" && url === "/api/blogs") {
+    const uidv = getUser(req);
+    if (!uidv) return sendJSON(res, 401, { error: "未登录" });
+    const u = readUsers().find(function (x) { return x.id === uidv; });
+    if (!u) return sendJSON(res, 401, { error: "用户不存在" });
+    return readBody(req, function (body) {
+      const title = (body.title || "").trim();
+      const content = (body.content || "").trim();
+      if (!title) return sendJSON(res, 400, { error: "标题不能为空" });
+      if (!content) return sendJSON(res, 400, { error: "正文不能为空" });
+      const now = Date.now();
+      const b = {
+        id: uid(), title: title, summary: (body.summary || "").trim(),
+        content: content,
+        tags: Array.isArray(body.tags) ? body.tags.map(function (t) { return (t || "").trim(); }).filter(Boolean) : [],
+        authorId: u.id, authorName: u.username, createdAt: now, updatedAt: now
+      };
+      const blogs = readBlogs(); blogs.push(b); writeBlogs(blogs);
+      sendJSON(res, 200, b);
+    });
+  }
+  return sendJSON(res, 404, { error: "unknown blog endpoint" });
+}
+
 /* ---------- 日报接口（强制登录 + 按用户隔离） ---------- */
 function handleApi(req, res, url) {
   const uidv = getUser(req);
@@ -189,6 +270,9 @@ const server = http.createServer((req, res) => {
   }
   if (url.startsWith("/api/auth/")) {
     return readBody(req, (body) => handleAuth(req, res, url, body));
+  }
+  if (url.startsWith("/api/blogs")) {
+    return handleBlogs(req, res, url);
   }
   if (url.startsWith("/api/")) {
     return handleApi(req, res, url);
