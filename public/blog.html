@@ -3,34 +3,38 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>博客 · 日报工作台</title>
+<title>笔记 · 公开博客</title>
 <style>
   :root { --bg:#f4f6f9; --panel:#fff; --text:#1f2329; --muted:#8a9099; --primary:#3b6cff; --primary-weak:#eaf0ff; --border:#e6e8eb; --shadow:0 1px 3px rgba(20,30,50,.06),0 6px 18px rgba(20,30,50,.05); --radius:14px; }
   * { box-sizing:border-box; }
   html,body { margin:0; padding:0; }
   body { font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--text); font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased; }
   a { color:var(--primary); text-decoration:none; }
-  .top { max-width:760px; margin:0 auto; padding:34px 20px 8px; }
+  .top { max-width:1080px; margin:0 auto; padding:30px 20px 6px; }
   .brand { display:flex; align-items:center; gap:10px; font-weight:700; font-size:22px; }
   .brand .dot { width:30px; height:30px; border-radius:9px; background:linear-gradient(135deg,#3b6cff,#7aa0ff); display:grid; place-items:center; color:#fff; font-size:16px; }
   .sub { color:var(--muted); margin:8px 0 0; font-size:13px; }
-  .hero { max-width:760px; margin:0 auto; padding:18px 20px; }
-  .hero h1 { margin:0 0 6px; font-size:26px; }
-  .hero p { margin:0; color:var(--muted); }
-  .toolbar { max-width:760px; margin:10px auto 0; padding:0 20px; }
+  .hero { max-width:1080px; margin:0 auto; background:linear-gradient(120deg,#3b6cff,#7aa0ff); border-radius:18px; padding:30px; color:#fff; box-shadow:var(--shadow); margin-top:6px; }
+  .hero h1 { margin:0 0 6px; font-size:24px; }
+  .hero p { margin:0; opacity:.92; font-size:14px; }
+  .toolbar { max-width:1080px; margin:16px auto 0; padding:0 20px; }
   .search { position:relative; }
   .search input { width:100%; padding:11px 12px 11px 38px; border:1px solid var(--border); border-radius:12px; background:var(--panel); color:var(--text); font-size:15px; }
   .search input:focus { outline:none; border-color:var(--primary); }
   .search svg { position:absolute; left:12px; top:50%; transform:translateY(-50%); opacity:.45; }
-  .list { max-width:760px; margin:18px auto 60px; padding:0 20px; display:flex; flex-direction:column; gap:16px; }
-  .card { background:var(--panel); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; box-shadow:var(--shadow); cursor:pointer; transition:.15s; }
-  .card:hover { border-color:var(--primary); transform:translateY(-1px); }
-  .title { font-size:18px; font-weight:700; margin-bottom:6px; }
-  .meta { font-size:12px; color:var(--muted); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
-  .summary { color:var(--text); opacity:.85; margin-top:10px; white-space:pre-wrap; word-break:break-word; }
-  .tags { display:inline-flex; gap:4px; flex-wrap:wrap; }
-  .tag { font-size:11px; padding:1px 9px; border-radius:20px; background:var(--primary-weak); color:var(--primary); }
-  .empty { text-align:center; padding:50px 20px; color:var(--muted); }
+  .grid { max-width:1080px; margin:18px auto 60px; padding:0 20px; display:grid; grid-template-columns:repeat(auto-fill, minmax(280px,1fr)); gap:16px; }
+  .note-card { background:var(--panel); border:1px solid var(--border); border-radius:14px; overflow:hidden; cursor:pointer; transition:.18s; box-shadow:var(--shadow); display:flex; flex-direction:column; }
+  .note-card:hover { transform:translateY(-3px); border-color:var(--primary); box-shadow:0 10px 28px rgba(40,70,160,.15); }
+  .note-cover { height:132px; background-size:cover; background-position:center; position:relative; }
+  .note-cover .cat { position:absolute; left:12px; bottom:10px; background:rgba(0,0,0,.42); color:#fff; font-size:12px; padding:3px 10px; border-radius:20px; }
+  .note-body { padding:14px 16px 16px; flex:1; display:flex; flex-direction:column; }
+  .note-title { font-size:16px; font-weight:700; line-height:1.4; margin-bottom:6px; }
+  .note-summary { font-size:13px; color:var(--muted); line-height:1.6; flex:1; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  .note-foot { display:flex; align-items:center; gap:8px; margin-top:12px; font-size:12px; color:var(--muted); }
+  .note-foot .avatar { width:22px; height:22px; border-radius:50%; background:var(--primary-weak); color:var(--primary); display:grid; place-items:center; font-size:11px; font-weight:700; }
+  .note-tags { display:flex; gap:5px; flex-wrap:wrap; margin-top:10px; }
+  .note-tag { font-size:11px; padding:1px 8px; border-radius:20px; background:var(--primary-weak); color:var(--primary); }
+  .empty { text-align:center; padding:50px 20px; color:var(--muted); grid-column:1/-1; }
   .empty .big { font-size:42px; margin-bottom:10px; }
   /* 详情层 */
   .mask { position:fixed; inset:0; background:rgba(15,20,30,.45); display:none; align-items:flex-start; justify-content:center; z-index:50; padding:40px 16px; overflow:auto; }
@@ -47,18 +51,23 @@
 </head>
 <body>
   <div class="top">
-    <div class="brand"><span class="dot">📋</span><span>日报工作台 · 博客</span></div>
-    <p class="sub">团队/个人的公开博客空间</p>
+    <div class="brand"><span class="dot">📋</span><span>日报工作台 · 公开笔记</span></div>
+    <p class="sub">团队/个人的公开笔记空间，任何人都能阅读</p>
+  </div>
+
+  <div class="hero">
+    <h1>📚 笔记广场</h1>
+    <p>这里汇集了大家公开发布的笔记与文章——技术沉淀、随笔感悟，世界都能看见。</p>
   </div>
 
   <div class="toolbar">
     <div class="search">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-      <input id="search" placeholder="搜索博客标题/摘要…">
+      <input id="search" placeholder="搜索公开笔记标题/摘要…">
     </div>
   </div>
 
-  <div class="list" id="list"></div>
+  <div class="grid" id="list"></div>
 
   <div class="mask" id="mask">
     <div class="detail">
@@ -76,13 +85,16 @@
   function $(id){ return document.getElementById(id); }
   function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
   function fmt(ts){ if(!ts) return ""; var d=new Date(ts); var p=function(n){return (n<10?"0":"")+n;}; return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()); }
+  function hashHue(str){ var h=0; for(var i=0;i<str.length;i++){ h=(h*31+str.charCodeAt(i))>>>0; } return h; }
+  function coverGradient(seed){ var h=hashHue(seed||"x"); var h1=h%360, h2=(h1+38)%360; return "linear-gradient(120deg, hsl("+h1+",68%,56%), hsl("+h2+",72%,46%))"; }
+  function cover(b){ return b.cover ? "background-image:linear-gradient(rgba(0,0,0,.12),rgba(0,0,0,.12)),url('"+esc(b.cover)+"')" : "background:"+coverGradient(b.id+b.title); }
   var list=[], kw="";
   function load(){
-    fetch("/api/blogs").then(function(r){ return r.json(); }).then(function(arr){
+    fetch("/api/blogs?scope=public").then(function(r){ return r.json(); }).then(function(arr){
       list = arr||[];
       render();
     }).catch(function(){
-      $("list").innerHTML = '<div class="empty"><div class="big">⚠️</div>无法连接博客服务，请确认服务端已启动。</div>';
+      $("list").innerHTML = '<div class="empty"><div class="big">⚠️</div>无法连接服务，请确认服务端已启动。</div>';
     });
   }
   function render(){
@@ -90,29 +102,34 @@
     var q = kw.toLowerCase();
     if (q) items = items.filter(function(b){ return (b.title||"").toLowerCase().indexOf(q)>=0 || (b.summary||"").toLowerCase().indexOf(q)>=0; });
     if (!items.length){
-      $("list").innerHTML = '<div class="empty"><div class="big">📝</div>还没有博客文章。</div>';
+      $("list").innerHTML = '<div class="empty"><div class="big">📝</div>还没有公开发布的笔记。</div>';
       return;
     }
     $("list").innerHTML = items.map(function(b){
-      var tags=(b.tags||[]).map(function(t){ return '<span class="tag">'+esc(t)+'</span>'; }).join("");
-      return '<div class="card" data-id="'+b.id+'">'+
-        '<div class="title">'+esc(b.title)+'</div>'+
-        '<div class="meta"><span>✍️ '+esc(b.authorName||"匿名")+'</span><span>·</span><span>'+fmt(b.createdAt)+'</span>'+(tags?('<span class="tags">'+tags+'</span>'):'')+'</div>'+
-        (b.summary?'<div class="summary">'+esc(b.summary)+'</div>':'')+
+      var tags=(b.tags||[]).slice(0,3).map(function(t){ return '<span class="note-tag">'+esc(t)+'</span>'; }).join("");
+      var summary = b.summary || (b.content||"").slice(0,80);
+      return '<div class="note-card" data-id="'+b.id+'">'+
+        '<div class="note-cover" style="'+cover(b)+'">'+(b.category?'<span class="cat">'+esc(b.category)+'</span>':'')+'</div>'+
+        '<div class="note-body">'+
+          '<div class="note-title">'+esc(b.title)+'</div>'+
+          (summary?'<div class="note-summary">'+esc(summary)+'</div>':'')+
+          (tags?'<div class="note-tags">'+tags+'</div>':'')+
+          '<div class="note-foot"><span class="avatar">'+esc((b.authorName||"匿")[0])+'</span><span>'+esc(b.authorName||"匿名")+'</span><span>·</span><span>'+fmt(b.createdAt)+'</span></div>'+
+        '</div>'+
       '</div>';
     }).join("");
   }
   function openDetail(id){
     fetch("/api/blogs/"+id).then(function(r){ return r.json(); }).then(function(b){
       $("dTitle").textContent = b.title||"无标题";
-      var tags=(b.tags||[]).map(function(t){ return '<span class="tag">'+esc(t)+'</span>'; }).join(" ");
-      $("dMeta").innerHTML = '✍️ '+esc(b.authorName||"匿名")+'　·　'+fmt(b.createdAt)+(tags?('　·　'+tags):'');
+      var tags=(b.tags||[]).map(function(t){ return '<span class="note-tag">'+esc(t)+'</span>'; }).join(" ");
+      $("dMeta").innerHTML = '✍️ '+esc(b.authorName||"匿名")+'　·　'+fmt(b.createdAt)+(b.category?('　·　'+esc(b.category)):'')+(tags?('　·　'+tags):'');
       $("dContent").textContent = b.content||"";
       $("mask").classList.add("open");
     }).catch(function(){ alert("加载失败"); });
   }
   $("search").oninput = function(){ kw=this.value; render(); };
-  $("list").onclick = function(e){ var c=e.target.closest(".card"); if(c) openDetail(c.getAttribute("data-id")); };
+  $("list").onclick = function(e){ var c=e.target.closest(".note-card"); if(c) openDetail(c.getAttribute("data-id")); };
   $("closeBtn").onclick = function(){ $("mask").classList.remove("open"); };
   $("closeBtn2").onclick = function(){ $("mask").classList.remove("open"); };
   $("mask").onclick = function(e){ if(e.target===$("mask")) $("mask").classList.remove("open"); };

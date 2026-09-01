@@ -143,13 +143,17 @@ function blogPublic(b) {
   return {
     id: b.id, title: b.title, summary: b.summary || "",
     tags: b.tags || [], authorId: b.authorId, authorName: b.authorName,
+    visibility: b.visibility || "public", cover: b.cover || "", category: b.category || "",
     createdAt: b.createdAt, updatedAt: b.updatedAt
   };
 }
 function handleBlogs(req, res, url) {
-  // 列表（公开，无需登录）
+  // 列表（公开，无需登录；scope=public 仅返回公开笔记，否则返回全部）
   if (req.method === "GET" && url === "/api/blogs") {
-    const list = readBlogs().sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).map(blogPublic);
+    const qp = new URLSearchParams((req.url.split("?")[1] || ""));
+    let blogs = readBlogs();
+    if (qp.get("scope") === "public") blogs = blogs.filter(function (b) { return b.visibility !== "private"; });
+    const list = blogs.sort(function (a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }).map(blogPublic);
     return sendJSON(res, 200, list);
   }
   // 单篇（公开，无需登录）
@@ -180,6 +184,9 @@ function handleBlogs(req, res, url) {
         if (body.title != null) b.title = (body.title || "").trim() || b.title;
         if (body.summary != null) b.summary = (body.summary || "").trim();
         if (body.content != null) b.content = body.content;
+        if (body.category != null) b.category = (body.category || "").trim();
+        if (body.cover != null) b.cover = (body.cover || "").trim();
+        if (body.visibility != null) b.visibility = body.visibility === "private" ? "private" : "public";
         if (body.tags != null) b.tags = Array.isArray(body.tags) ? body.tags.map(function (t) { return (t || "").trim(); }).filter(Boolean) : b.tags;
         b.updatedAt = Date.now();
         writeBlogs(blogs);
@@ -202,7 +209,10 @@ function handleBlogs(req, res, url) {
       const b = {
         id: uid(), title: title, summary: (body.summary || "").trim(),
         content: content,
+        category: (body.category || "").trim(),
         tags: Array.isArray(body.tags) ? body.tags.map(function (t) { return (t || "").trim(); }).filter(Boolean) : [],
+        visibility: body.visibility === "private" ? "private" : "public",
+        cover: (body.cover || "").trim(),
         authorId: u.id, authorName: u.username, createdAt: now, updatedAt: now
       };
       const blogs = readBlogs(); blogs.push(b); writeBlogs(blogs);

@@ -151,6 +151,37 @@
   .bd-content { white-space: pre-wrap; word-break: break-word; line-height: 1.8; font-size: 14px; }
   .bf-active { background: var(--primary) !important; color: #fff !important; border-color: var(--primary) !important; }
 
+  /* 首页公共笔记画廊（高大上） */
+  .hero { background: linear-gradient(120deg,#3b6cff,#7aa0ff); border-radius: 18px; padding: 32px 30px; color: #fff; box-shadow: var(--shadow); margin-bottom: 20px; }
+  .hero h1 { margin: 0 0 6px; font-size: 24px; }
+  .hero p { margin: 0; opacity: .92; font-size: 14px; }
+  .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px,1fr)); gap: 16px; }
+  .note-card { background: var(--panel); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; cursor: pointer; transition: .18s; box-shadow: var(--shadow); display: flex; flex-direction: column; }
+  .note-card:hover { transform: translateY(-3px); border-color: var(--primary); box-shadow: 0 10px 28px rgba(40,70,160,.15); }
+  .note-cover { height: 132px; background-size: cover; background-position: center; position: relative; }
+  .note-cover .cat { position: absolute; left: 12px; bottom: 10px; background: rgba(0,0,0,.42); color: #fff; font-size: 12px; padding: 3px 10px; border-radius: 20px; }
+  .note-body { padding: 14px 16px 16px; flex: 1; display: flex; flex-direction: column; }
+  .note-title { font-size: 16px; font-weight: 700; line-height: 1.4; margin-bottom: 6px; }
+  .note-summary { font-size: 13px; color: var(--muted); line-height: 1.6; flex: 1; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+  .note-foot { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 12px; color: var(--muted); }
+  .note-foot .avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--primary-weak); color: var(--primary); display: grid; place-items: center; font-size: 11px; font-weight: 700; }
+  .note-tags { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 10px; }
+  .note-tag { font-size: 11px; padding: 1px 8px; border-radius: 20px; background: var(--primary-weak); color: var(--primary); }
+  .vis-badge { font-size: 11px; padding: 1px 8px; border-radius: 20px; }
+  .vis-public { background: #e7f7ee; color: #1f9d57; }
+  .vis-private { background: #fdeaea; color: #e5484d; }
+  [data-theme="dark"] .vis-public { background: #16331f; color: #5fd99a; }
+  [data-theme="dark"] .vis-private { background: #3a1c1e; color: #ff8a8e; }
+  .seg { display: inline-flex; background: var(--tag-bg); border-radius: 10px; padding: 3px; gap: 2px; }
+  .seg button { border: none; background: transparent; padding: 6px 12px; border-radius: 8px; color: var(--muted); font-size: 13px; cursor: pointer; }
+  .seg button.active { background: var(--panel); color: var(--primary); font-weight: 600; box-shadow: var(--shadow); }
+  .vis-row { display: flex; gap: 18px; align-items: center; margin-top: 4px; }
+  .vis-row label { display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-size: 14px; cursor: pointer; }
+  .vis-row input { accent-color: var(--primary); }
+  .md-tools { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
+  .md-tools button { border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); border-radius: 7px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
+  .md-tools button:hover { color: var(--primary); border-color: var(--primary); }
+
   /* auth */
   .auth-mask { position: fixed; inset: 0; background: linear-gradient(135deg,#eef2ff,#f6f9fc); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
   .auth-mask.open { display: flex; }
@@ -170,6 +201,7 @@
   <div class="spacer"></div>
   <div class="actions">
     <span id="netStatus" style="font-size:12px;color:var(--muted);align-self:center"><span class="net-dot"></span>已连接</span>
+    <button class="btn ghost" id="btnLogin" style="display:none">登录</button>
     <span id="userBox" style="display:none;font-size:13px;color:var(--muted);align-self:center"><b id="userName" style="color:var(--text)"></b> <button class="btn sm ghost" id="btnLogout">退出</button></span>
     <button class="btn ghost" id="btnImport" title="导入 JSON 备份">导入</button>
     <button class="btn ghost" id="btnExportMd">导出日报 Markdown</button>
@@ -180,10 +212,11 @@
 </header>
 
 <nav class="tabs">
-  <button class="tab active" data-view="list">全部日报</button>
+  <button class="tab active" data-view="home">首页</button>
+  <button class="tab" data-view="note">笔记</button>
+  <button class="tab" data-view="list">全部日报</button>
   <button class="tab" data-view="stats">统计</button>
   <button class="tab" data-view="week">周报</button>
-  <button class="tab" data-view="blog">博客</button>
 </nav>
 
 <main>
@@ -239,19 +272,33 @@
       </div>
     </div>
   </section>
-  <section class="view" id="view-blog">
+  <section class="view active" id="view-home">
+    <div class="hero">
+      <h1>📚 笔记广场</h1>
+      <p>这里汇集大家公开发布的笔记与文章——任何人都能阅读。把你的公开笔记放在简历里，世界都能看见。</p>
+    </div>
     <div class="toolbar">
       <div class="search">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-        <input id="blogSearch" placeholder="搜索博客标题/正文…">
+        <input id="homeSearch" placeholder="搜索公开笔记标题/摘要…">
       </div>
-      <div class="filter-date" style="gap:6px">
-        <button class="btn ghost bf-active" data-bf="all">全部</button>
-        <button class="btn ghost" data-bf="mine">我的</button>
-      </div>
-      <button class="btn primary" id="btnWriteBlog">+ 写博客</button>
     </div>
-    <div class="cards" id="blogList"></div>
+    <div class="home-grid" id="homeGrid"></div>
+  </section>
+
+  <section class="view" id="view-note">
+    <div class="toolbar">
+      <div class="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="noteSearch" placeholder="搜索我的笔记标题/摘要…">
+      </div>
+      <div class="seg" id="noteSeg">
+        <button class="active" data-nf="mine">我的</button>
+        <button data-nf="public">公开</button>
+      </div>
+      <button class="btn primary" id="btnWriteNote">+ 写笔记</button>
+    </div>
+    <div class="cards" id="noteList"></div>
   </section>
 </main>
 
@@ -283,19 +330,40 @@
   </div>
 </div>
 
-<div class="modal-mask" id="blogModal">
+<div class="modal-mask" id="noteModal">
   <div class="modal">
-    <div class="modal-head"><h2 id="blogModalTitle">写博客</h2><button class="x" id="blogModalClose">×</button></div>
+    <div class="modal-head"><h2 id="noteModalTitle">写笔记</h2><button class="x" id="noteModalClose">×</button></div>
     <div class="modal-body">
-      <div class="field"><label>标题</label><input id="bTitle" placeholder="博客标题"></div>
-      <div class="field"><label>摘要（列表卡片显示，可选）</label><input id="bSummary" placeholder="一句话摘要"></div>
-      <div class="field"><label>标签（逗号分隔，可选）</label><input id="bTags" placeholder="前端, Node, 心得"></div>
-      <div class="field"><label>正文</label><textarea id="bContent" placeholder="写下你的博客内容，支持换行"></textarea></div>
-      <div class="hint">博客是共享的，所有访问者（含未登录访客）都能看到。作者记录为当前登录账号，只有你能编辑/删除自己的博客。</div>
+      <div class="field"><label>标题</label><input id="noteTitle" placeholder="给你的笔记起个标题，如：Node 服务部署踩坑记"></div>
+      <div class="row2">
+        <div class="field"><label>分类（可选）</label><input id="noteCategory" placeholder="如：后端 / 前端 / 随笔"></div>
+        <div class="field"><label>标签（逗号分隔，可选）</label><input id="noteTags" placeholder="Node, 部署, 心得"></div>
+      </div>
+      <div class="field"><label>摘要（展示在列表卡片上，可选）</label><input id="noteSummary" placeholder="一句话说清这篇笔记讲什么"></div>
+      <div class="field"><label>封面图（可选，填图片链接；留空则自动生成渐变封面）</label><input id="noteCover" placeholder="https://… 或留空"></div>
+      <div class="field">
+        <label>可见范围</label>
+        <div class="vis-row">
+          <label><input type="radio" name="noteVis" value="public" checked> 🌐 公开（显示在首页笔记广场，任何人可见，可放简历）</label>
+          <label><input type="radio" name="noteVis" value="private"> 🔒 私有（仅自己可见）</label>
+        </div>
+      </div>
+      <div class="field">
+        <label>正文</label>
+        <div class="md-tools">
+          <button type="button" data-md="h">H1</button>
+          <button type="button" data-md="b">加粗</button>
+          <button type="button" data-md="code">代码</button>
+          <button type="button" data-md="list">列表</button>
+          <button type="button" data-md="quote">引用</button>
+        </div>
+        <textarea id="noteContent" placeholder="在这里写笔记正文，支持 Markdown 语法。对标 CSDN：分章节、配代码块、加粗重点。"></textarea>
+      </div>
+      <div class="hint">笔记默认公开并展示在首页笔记广场；设为私有则只有你自己可见。作者记录为当前账号，只有你能编辑/删除。</div>
     </div>
     <div class="modal-foot">
-      <button class="btn ghost" id="blogCancel">取消</button>
-      <button class="btn primary" id="blogSave">发布</button>
+      <button class="btn ghost" id="noteCancel">取消</button>
+      <button class="btn primary" id="noteSave">发布</button>
     </div>
   </div>
 </div>
@@ -337,7 +405,8 @@
   var API = "/api/reports";
   var BLOG_API = "/api/blogs";
   var state = { reports: [], filter: { keyword: "", from: "", to: "" }, editingId: null, weekMarkdown: "", weekData: null, weekPoints: [] };
-  var blogState = { list: [], filter: "all", keyword: "", editingId: null };
+  var noteState = { list: [], filter: "mine", keyword: "", editingId: null };
+  var homeState = { list: [], keyword: "" };
 
   /* ---------- api（支持服务端 / 浏览器本地 双模式） ---------- */
   var MODE = null; // 'server' | 'local'
@@ -401,8 +470,11 @@
     });
   }
 
-  /* ---------- 博客 API ---------- */
-  function apiBlogList(){ return fetch(BLOG_API).then(function(r){ if(!r.ok) throw 0; return r.json(); }); }
+  /* ---------- 笔记 API ---------- */
+  function apiBlogList(scope){
+    var url = BLOG_API + (scope === "public" ? "?scope=public" : "");
+    return fetch(url).then(function(r){ if(!r.ok) throw 0; return r.json(); });
+  }
   function apiBlogGet(id){ return fetch(BLOG_API+"/"+id).then(function(r){ if(!r.ok) throw 0; return r.json(); }); }
   function apiBlogCreate(b){
     return fetch(BLOG_API, { method:"POST", headers:Object.assign({"Content-Type":"application/json"}, authHeader()), body: JSON.stringify(b) })
@@ -417,52 +489,91 @@
       .then(function(r){ if(!r.ok) throw 0; return r.json(); });
   }
 
-  /* ---------- 博客渲染 ---------- */
-  function loadBlogs(){
-    if (MODE !== "server"){ $("blogList").innerHTML = '<div class="empty"><div class="big">🌐</div>博客是共享功能，需要连接到服务端才能使用。<br>请启动/连接本地服务，或部署到你的云服务器。</div>'; return; }
-    apiBlogList().then(function(arr){
-      blogState.list = arr || [];
-      renderBlogList();
-    }).catch(function(){ $("blogList").innerHTML = '<div class="empty"><div class="big">⚠️</div>无法加载博客，请确认服务已连接。</div>'; });
+  /* ---------- 封面渐变 / 时间 ---------- */
+  function hashHue(str){ var h=0; for(var i=0;i<str.length;i++){ h=(h*31+str.charCodeAt(i))>>>0; } return h; }
+  function coverGradient(seed){ var h=hashHue(seed||"x"); var h1=h%360, h2=(h1+38)%360; return "linear-gradient(120deg, hsl("+h1+",68%,56%), hsl("+h2+",72%,46%))"; }
+  function fmtDate(ts){ if(!ts) return ""; var d=new Date(ts); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function noteCover(b){
+    if (b.cover) return "background-image:linear-gradient(rgba(0,0,0,.12),rgba(0,0,0,.12)),url('"+esc(b.cover)+"')";
+    return "background:"+coverGradient(b.id+b.title);
   }
-  function fmtDate(ts){
-    if (!ts) return "";
-    var d = new Date(ts); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+
+  /* ---------- 首页笔记广场（公开，无需登录） ---------- */
+  function loadHome(){
+    apiBlogList("public").then(function(arr){
+      homeState.list = arr || [];
+      renderHome();
+    }).catch(function(){ $("homeGrid").innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="big">⚠️</div>无法加载公开笔记，请确认服务已连接。</div>'; });
   }
-  function renderBlogList(){
-    var list = blogState.list.slice();
-    if (blogState.filter === "mine"){
-      if (!USER){ $("blogList").innerHTML = '<div class="empty"><div class="big">🔒</div>请先登录后查看「我的博客」。</div>'; return; }
-      list = list.filter(function(b){ return b.authorId === USER.id; });
-    }
-    var kw = blogState.keyword.toLowerCase();
-    if (kw){
-      list = list.filter(function(b){
-        return (b.title||"").toLowerCase().indexOf(kw)>=0 || (b.summary||"").toLowerCase().indexOf(kw)>=0;
-      });
-    }
+  function renderHome(){
+    var list = homeState.list.slice();
+    var kw = homeState.keyword.toLowerCase();
+    if (kw) list = list.filter(function(b){ return (b.title||"").toLowerCase().indexOf(kw)>=0 || (b.summary||"").toLowerCase().indexOf(kw)>=0 || (b.tags||[]).join(" ").toLowerCase().indexOf(kw)>=0; });
     if (!list.length){
-      $("blogList").innerHTML = '<div class="empty"><div class="big">📝</div>'+(blogState.filter==="mine"?"你还没有发布过博客。":"还没有博客，点右上角「+ 写博客」发布第一篇吧。")+'</div>';
+      $("homeGrid").innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="big">📝</div>还没有公开发布的笔记。去「笔记」里写一篇并设为「公开」，就会出现在首页广场。</div>';
       return;
     }
-    var html = list.map(function(b){
-      var tags = (b.tags||[]).map(function(t){ return '<span class="blog-tag">'+esc(t)+'</span>'; }).join("");
-      var own = USER && b.authorId === USER.id;
-      return '<div class="card blog-card" data-bid="'+b.id+'">'+
-        '<div class="blog-title">'+esc(b.title)+'</div>'+
-        '<div class="blog-meta"><span>✍️ '+esc(b.authorName||"匿名")+'</span><span>·</span><span>'+fmtDate(b.createdAt)+'</span>'+
-          (tags?('<span class="blog-tags">'+tags+'</span>'):'')+'</div>'+
-        (b.summary?'<div class="blog-summary">'+esc(b.summary)+'</div>':'')+
-        (own?'<div style="margin-top:10px"><button class="iconbtn" data-bed="'+b.id+'">编辑</button><button class="iconbtn" data-bdel="'+b.id+'">删除</button></div>':'')+
+    $("homeGrid").innerHTML = list.map(function(b){
+      var tags=(b.tags||[]).slice(0,3).map(function(t){ return '<span class="note-tag">'+esc(t)+'</span>'; }).join("");
+      var summary = b.summary || (b.content||"").slice(0,80);
+      return '<div class="note-card" data-bid="'+b.id+'">'+
+        '<div class="note-cover" style="'+noteCover(b)+'">'+(b.category?'<span class="cat">'+esc(b.category)+'</span>':'')+'</div>'+
+        '<div class="note-body">'+
+          '<div class="note-title">'+esc(b.title)+'</div>'+
+          (summary?'<div class="note-summary">'+esc(summary)+'</div>':'')+
+          (tags?'<div class="note-tags">'+tags+'</div>':'')+
+          '<div class="note-foot"><span class="avatar">'+esc((b.authorName||"匿")[0])+'</span><span>'+esc(b.authorName||"匿名")+'</span><span>·</span><span>'+fmtDate(b.createdAt)+'</span></div>'+
+        '</div>'+
       '</div>';
     }).join("");
-    $("blogList").innerHTML = html;
   }
-  function openBlogDetail(id){
+
+  /* ---------- 笔记（我的 / 公开） ---------- */
+  function loadNotes(){
+    if (MODE !== "server"){ $("noteList").innerHTML = '<div class="empty"><div class="big">🌐</div>笔记是共享功能，需连接服务端。请启动/连接本地服务或部署到你的云服务器。</div>'; return; }
+    if (noteState.filter === "mine" && !USER){ showAuth(); toast("请先登录查看我的笔记"); return; }
+    var scope = noteState.filter === "public" ? "public" : null;
+    apiBlogList(scope).then(function(arr){
+      noteState.list = arr || [];
+      renderNoteList();
+    }).catch(function(){ $("noteList").innerHTML = '<div class="empty"><div class="big">⚠️</div>无法加载笔记，请确认服务已连接。</div>'; });
+  }
+  function renderNoteList(){
+    var list = noteState.list.slice();
+    if (noteState.filter === "mine"){
+      if (!USER){ $("noteList").innerHTML = '<div class="empty"><div class="big">🔒</div>请先登录后查看「我的笔记」。</div>'; return; }
+      list = list.filter(function(b){ return b.authorId === USER.id; });
+    } else {
+      list = list.filter(function(b){ return b.visibility !== "private"; });
+    }
+    var kw = noteState.keyword.toLowerCase();
+    if (kw) list = list.filter(function(b){ return (b.title||"").toLowerCase().indexOf(kw)>=0 || (b.summary||"").toLowerCase().indexOf(kw)>=0; });
+    if (!list.length){
+      $("noteList").innerHTML = '<div class="empty"><div class="big">📒</div>'+(noteState.filter==="mine"?"你还没有发布过笔记。":"还没有公开笔记。")+'</div>';
+      return;
+    }
+    $("noteList").innerHTML = list.map(function(b){
+      var own = USER && b.authorId === USER.id;
+      var tags=(b.tags||[]).slice(0,3).map(function(t){ return '<span class="note-tag">'+esc(t)+'</span>'; }).join("");
+      var summary = b.summary || (b.content||"").slice(0,80);
+      return '<div class="note-card" data-bid="'+b.id+'">'+
+        '<div class="note-cover" style="'+noteCover(b)+'">'+(b.category?'<span class="cat">'+esc(b.category)+'</span>':'')+'</div>'+
+        '<div class="note-body">'+
+          '<div class="note-title">'+esc(b.title)+'</div>'+
+          (summary?'<div class="note-summary">'+esc(summary)+'</div>':'')+
+          (tags?'<div class="note-tags">'+tags+'</div>':'')+
+          '<div class="note-foot"><span class="vis-badge '+(b.visibility==="private"?"vis-private":"vis-public")+'">'+(b.visibility==="private"?"🔒 私有":"🌐 公开")+'</span>'+
+            (own?'<span style="margin-left:auto"><button class="iconbtn" data-bed="'+b.id+'">编辑</button><button class="iconbtn" data-bdel="'+b.id+'">删除</button></span>':'')+
+          '</div>'+
+        '</div>'+
+      '</div>';
+    }).join("");
+  }
+  function openNoteDetail(id){
     apiBlogGet(id).then(function(b){
       $("bdTitle").textContent = b.title || "无标题";
-      var tags = (b.tags||[]).map(function(t){ return '<span class="blog-tag">'+esc(t)+'</span>'; }).join(" ");
-      $("bdMeta").innerHTML = '✍️ '+esc(b.authorName||"匿名")+'　·　'+fmtDate(b.createdAt) + (tags?('　·　'+tags):'');
+      var tags=(b.tags||[]).map(function(t){ return '<span class="note-tag">'+esc(t)+'</span>'; }).join(" ");
+      $("bdMeta").innerHTML = '✍️ '+esc(b.authorName||"匿名")+'　·　'+fmtDate(b.createdAt) + (b.category?('　·　'+esc(b.category)):'') + (tags?('　·　'+tags):'') + '　·　'+(b.visibility==="private"?"🔒 私有":"🌐 公开");
       $("bdContent").textContent = b.content || "";
       var own = USER && b.authorId === USER.id;
       $("blogDetailFoot").innerHTML = own
@@ -470,40 +581,64 @@
         : '<button class="btn primary" id="bdClose">关闭</button>';
       $("blogDetailMask").classList.add("open");
       if (own){
-        $("bdEdit").onclick = function(){ $("blogDetailMask").classList.remove("open"); openBlogModal(id); };
-        $("bdDel").onclick = function(){ if(confirm("确定删除这篇博客？")){ apiBlogDelete(id).then(function(){ $("blogDetailMask").classList.remove("open"); loadBlogs(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } };
+        $("bdEdit").onclick = function(){ $("blogDetailMask").classList.remove("open"); openNoteModal(id); };
+        $("bdDel").onclick = function(){ if(confirm("确定删除这篇笔记？")){ apiBlogDelete(id).then(function(){ $("blogDetailMask").classList.remove("open"); loadNotes(); loadHome(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } };
       }
       $("bdClose").onclick = function(){ $("blogDetailMask").classList.remove("open"); };
     }).catch(function(){ toast("加载失败"); });
   }
-  function openBlogModal(id){
-    if (MODE !== "server"){ toast("博客需连接服务端"); return; }
-    if (!USER){ showAuth(); toast("请先登录后再写博客"); return; }
-    blogState.editingId = id || null;
-    $("blogModalTitle").textContent = id ? "编辑博客" : "写博客";
+  function openNoteModal(id){
+    if (MODE !== "server"){ toast("笔记需连接服务端"); return; }
+    if (!USER){ showAuth(); toast("请先登录后再写笔记"); return; }
+    noteState.editingId = id || null;
+    $("noteModalTitle").textContent = id ? "编辑笔记" : "写笔记";
     if (id){
-      var b = blogState.list.find(function(x){ return x.id===id; });
+      var b = noteState.list.find(function(x){ return x.id===id; });
       if (!b) return;
-      $("bTitle").value = b.title || ""; $("bSummary").value = b.summary || "";
-      $("bTags").value = (b.tags||[]).join(", "); $("bContent").value = b.content || "";
+      $("noteTitle").value = b.title || ""; $("noteSummary").value = b.summary || "";
+      $("noteCategory").value = b.category || ""; $("noteTags").value = (b.tags||[]).join(", ");
+      $("noteCover").value = b.cover || "";
+      var vis = b.visibility === "private" ? "private" : "public";
+      document.querySelector('input[name="noteVis"][value="'+vis+'"]').checked = true;
+      $("noteContent").value = b.content || "";
     } else {
-      $("bTitle").value=""; $("bSummary").value=""; $("bTags").value=""; $("bContent").value="";
+      $("noteTitle").value=""; $("noteSummary").value=""; $("noteCategory").value=""; $("noteTags").value=""; $("noteCover").value="";
+      document.querySelector('input[name="noteVis"][value="public"]').checked = true;
+      $("noteContent").value="";
     }
-    $("blogModal").classList.add("open");
-    setTimeout(function(){ $("bTitle").focus(); }, 50);
+    $("noteModal").classList.add("open");
+    setTimeout(function(){ $("noteTitle").focus(); }, 50);
   }
-  function saveBlog(){
-    var title = $("bTitle").value.trim();
-    var content = $("bContent").value.trim();
+  function saveNote(){
+    var title = $("noteTitle").value.trim();
+    var content = $("noteContent").value.trim();
     if (!title){ toast("标题不能为空"); return; }
     if (!content){ toast("正文不能为空"); return; }
-    var tags = $("bTags").value.split(",").map(function(t){ return t.trim(); }).filter(Boolean);
-    var payload = { title:title, summary:$("bSummary").value.trim(), content:content, tags:tags };
+    var tags = $("noteTags").value.split(",").map(function(t){ return t.trim(); }).filter(Boolean);
+    var visEl = document.querySelector('input[name="noteVis"]:checked');
+    var visibility = visEl ? visEl.value : "public";
+    var payload = {
+      title:title, summary:$("noteSummary").value.trim(), content:content, tags:tags,
+      category:$("noteCategory").value.trim(), cover:$("noteCover").value.trim(), visibility:visibility
+    };
     var p;
-    if (blogState.editingId){ payload.id = blogState.editingId; p = apiBlogUpdate(payload); }
+    if (noteState.editingId){ payload.id = noteState.editingId; p = apiBlogUpdate(payload); }
     else p = apiBlogCreate(payload);
-    p.then(function(){ $("blogModal").classList.remove("open"); loadBlogs(); toast(blogState.editingId?"已更新":"已发布"); })
+    p.then(function(){ $("noteModal").classList.remove("open"); loadNotes(); loadHome(); toast(noteState.editingId?"已更新":"已发布"); })
      .catch(function(e){ toast(e.message || "操作失败"); });
+  }
+  /* ---------- 笔记编辑器工具栏（Markdown 快捷插入，对标 CSDN） ---------- */
+  function mdWrap(before, after, placeholder){
+    var ta = $("noteContent"); var s=ta.selectionStart, e=ta.selectionEnd;
+    var sel = ta.value.slice(s,e) || placeholder || "";
+    ta.value = ta.value.slice(0,s) + before + sel + after + ta.value.slice(e);
+    ta.focus(); ta.selectionStart = s + before.length; ta.selectionEnd = s + before.length + sel.length;
+  }
+  function mdLine(prefix){
+    var ta = $("noteContent"); var s=ta.selectionStart;
+    var lineStart = ta.value.lastIndexOf("\n", s-1)+1;
+    ta.value = ta.value.slice(0,lineStart) + prefix + ta.value.slice(lineStart);
+    ta.focus(); ta.selectionStart = ta.selectionEnd = lineStart + prefix.length;
   }
   function doLogin(username, password){
     return fetch("/api/auth/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({username:username,password:password}) })
@@ -523,8 +658,12 @@
   }
   function setNet(){
     var el=$("netStatus"); if(!el) return;
-    if (MODE === "local"){ el.innerHTML = '<span class="net-dot off" style="background:#d97706"></span>本地模式'; $("userBox").style.display="none"; }
-    else { el.innerHTML = '<span class="net-dot"></span>已连接'; if (USER){ $("userBox").style.display=""; $("userName").textContent = USER.username; } else { $("userBox").style.display="none"; } }
+    if (MODE === "local"){ el.innerHTML = '<span class="net-dot off" style="background:#d97706"></span>本地模式'; $("userBox").style.display="none"; $("btnLogin").style.display="none"; }
+    else {
+      el.innerHTML = '<span class="net-dot"></span>已连接';
+      if (USER){ $("userBox").style.display=""; $("userName").textContent = USER.username; $("btnLogin").style.display="none"; }
+      else { $("userBox").style.display="none"; $("btnLogin").style.display=""; }
+    }
   }
 
   /* ---------- helpers ---------- */
@@ -911,7 +1050,7 @@
 
   /* ---------- events ---------- */
   function bind(){
-    $("btnNew").onclick = function(){ openForm(); };
+    $("btnNew").onclick = function(){ if (MODE==="server" && !USER){ showAuth(); toast("写日报请先登录"); return; } openForm(); };
     $("btnAddPoint").onclick = function(){ addPointRow(""); var last=$("fPointsWrap").lastChild.querySelector(".pt-input"); if(last) last.focus(); };
     $("btnSave").onclick = saveForm;
     $("btnCancel").onclick = closeForm;
@@ -934,16 +1073,24 @@
 
     document.querySelectorAll(".tab").forEach(function(t){
       t.onclick = function(){
+        var v = t.getAttribute("data-view");
+        // 日报/统计/周报 需要登录（浏览模式下拦截并提示登录）
+        if ((v==="list"||v==="stats"||v==="week") && MODE==="server" && !USER){
+          showAuth(); toast("请先登录后再使用日报功能");
+          return;
+        }
         document.querySelectorAll(".tab").forEach(function(x){ x.classList.remove("active"); });
         t.classList.add("active");
-        var v = t.getAttribute("data-view");
+        $("view-home").classList.toggle("active", v==="home");
+        $("view-note").classList.toggle("active", v==="note");
         $("view-list").classList.toggle("active", v==="list");
         $("view-stats").classList.toggle("active", v==="stats");
         $("view-week").classList.toggle("active", v==="week");
-        $("view-blog").classList.toggle("active", v==="blog");
-        if (v==="stats") renderStats();
-        if (v==="week") renderWeekEditor();
-        if (v==="blog") loadBlogs();
+        if (v==="home") loadHome();
+        else if (v==="note") loadNotes();
+        else if (v==="stats") renderStats();
+        else if (v==="week") renderWeekEditor();
+        else if (v==="list") reload();
       };
     });
 
@@ -989,7 +1136,7 @@
       if (p.length < 6){ $("authErr").textContent = "密码至少 6 位"; return; }
       var fn = (authMode === "login") ? doLogin : doRegister;
       fn(u, p).then(function(){
-      hideAuth(); setNet(); reload(); loadBlogs();
+      hideAuth(); setNet(); reload(); loadHome(); loadNotes();
       toast(authMode === "login" ? "欢迎回来" : "注册成功，开始记录吧");
       }).catch(function(e){ $("authErr").textContent = e.message || "操作失败"; });
     };
@@ -1005,30 +1152,47 @@
       };
     });
     $("btnLogout").onclick = logout;
+    $("btnLogin").onclick = function(){ showAuth(); };
 
-    /* 博客 */
-    $("btnWriteBlog").onclick = function(){ openBlogModal(); };
-    $("blogSave").onclick = saveBlog;
-    $("blogCancel").onclick = function(){ $("blogModal").classList.remove("open"); };
-    $("blogModalClose").onclick = function(){ $("blogModal").classList.remove("open"); };
-    $("blogModal").onclick = function(e){ if (e.target === $("blogModal")) $("blogModal").classList.remove("open"); };
+    /* 首页笔记广场 */
+    $("homeSearch").oninput = function(){ homeState.keyword = this.value; renderHome(); };
+    $("homeGrid").onclick = function(e){ var c=e.target.closest(".note-card"); if(c) openNoteDetail(c.getAttribute("data-bid")); };
+
+    /* 笔记 */
+    $("btnWriteNote").onclick = function(){ openNoteModal(); };
+    $("noteSave").onclick = saveNote;
+    $("noteCancel").onclick = function(){ $("noteModal").classList.remove("open"); };
+    $("noteModalClose").onclick = function(){ $("noteModal").classList.remove("open"); };
+    $("noteModal").onclick = function(e){ if (e.target === $("noteModal")) $("noteModal").classList.remove("open"); };
     $("blogDetailClose").onclick = function(){ $("blogDetailMask").classList.remove("open"); };
     $("blogDetailMask").onclick = function(e){ if (e.target === $("blogDetailMask")) $("blogDetailMask").classList.remove("open"); };
-    $("blogSearch").oninput = function(){ blogState.keyword = this.value; renderBlogList(); };
-    document.querySelectorAll("[data-bf]").forEach(function(b){
+    $("noteSearch").oninput = function(){ noteState.keyword = this.value; renderNoteList(); };
+    document.querySelectorAll("#noteSeg button").forEach(function(b){
       b.onclick = function(){
-        document.querySelectorAll("[data-bf]").forEach(function(x){ x.classList.remove("bf-active"); });
-        b.classList.add("bf-active");
-        blogState.filter = b.getAttribute("data-bf");
-        renderBlogList();
+        document.querySelectorAll("#noteSeg button").forEach(function(x){ x.classList.remove("active"); });
+        b.classList.add("active");
+        noteState.filter = b.getAttribute("data-nf");
+        loadNotes();
       };
     });
-    $("blogList").onclick = function(e){
-      var ed = e.target.closest("[data-bed]"); if (ed){ openBlogModal(ed.getAttribute("data-bed")); return; }
+    $("noteList").onclick = function(e){
+      var ed = e.target.closest("[data-bed]"); if (ed){ openNoteModal(ed.getAttribute("data-bed")); return; }
       var dl = e.target.closest("[data-bdel]");
-      if (dl){ var id=dl.getAttribute("data-bdel"); if(confirm("确定删除这篇博客？")){ apiBlogDelete(id).then(function(){ loadBlogs(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } return; }
-      var card = e.target.closest(".blog-card"); if (card){ openBlogDetail(card.getAttribute("data-bid")); }
+      if (dl){ var id=dl.getAttribute("data-bdel"); if(confirm("确定删除这篇笔记？")){ apiBlogDelete(id).then(function(){ loadNotes(); loadHome(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } return; }
+      var card = e.target.closest(".note-card"); if (card){ openNoteDetail(card.getAttribute("data-bid")); }
     };
+
+    /* 笔记编辑器工具栏（Markdown 快捷，对标 CSDN） */
+    document.querySelectorAll(".md-tools button").forEach(function(btn){
+      btn.onclick = function(){
+        var k = btn.getAttribute("data-md");
+        if (k==="h") mdLine("# ");
+        else if (k==="b") mdWrap("**","**","加粗文字");
+        else if (k==="code") mdWrap("`","`","代码");
+        else if (k==="list") mdLine("- ");
+        else if (k==="quote") mdLine("> ");
+      };
+    });
   }
   function fallbackCopy(){
     var ta=document.createElement("textarea"); ta.value=state.weekMarkdown; document.body.appendChild(ta); ta.select();
@@ -1047,14 +1211,17 @@
   //  - 网络不可达 → 本地模式（无需登录，数据存浏览器）
   apiMe().then(function(user){
     MODE = "server"; USER = user; localStorage.setItem(USER_KEY, JSON.stringify(user));
-    hideAuth(); setNet(); reload();
+    hideAuth(); setNet(); reload(); loadHome(); loadNotes();
   }).catch(function(err){
     if (err && err.status === 0){
-      MODE = "local"; TOKEN=null; USER=null; hideAuth(); setNet(); reload();
+      MODE = "local"; TOKEN=null; USER=null; hideAuth(); setNet(); reload(); loadHome();
     } else {
       MODE = "server"; TOKEN=null; USER=null;
       localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY);
-      showAuth(); setNet();
+      hideAuth(); setNet(); loadHome();
+      // 未登录：笔记广场默认看「公开」笔记
+      noteState.filter = "public";
+      document.querySelectorAll("#noteSeg button").forEach(function(x){ x.classList.toggle("active", x.getAttribute("data-nf")==="public"); });
     }
   });
 })();
