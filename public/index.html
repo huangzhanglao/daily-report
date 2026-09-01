@@ -138,6 +138,18 @@
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .footer-note { text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
   .img-preview { max-width: 100%; border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; }
+
+  /* auth */
+  .auth-mask { position: fixed; inset: 0; background: linear-gradient(135deg,#eef2ff,#f6f9fc); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+  .auth-mask.open { display: flex; }
+  [data-theme="dark"] .auth-mask { background: linear-gradient(135deg,#15171c,#1b1e27); }
+  .auth-card { width: 100%; max-width: 360px; background: var(--panel); border: 1px solid var(--border); border-radius: 18px; padding: 26px; box-shadow: var(--shadow); }
+  .auth-card .logo { justify-content: center; margin-bottom: 18px; }
+  .auth-tabs { display: flex; gap: 6px; margin-bottom: 16px; background: var(--tag-bg); padding: 4px; border-radius: 10px; }
+  .auth-tab { flex: 1; border: none; background: transparent; padding: 8px; border-radius: 7px; color: var(--muted); font-size: 14px; cursor: pointer; }
+  .auth-tab.active { background: var(--panel); color: var(--primary); font-weight: 600; box-shadow: var(--shadow); }
+  #authErr { color: var(--danger); font-size: 12px; min-height: 16px; margin: 2px 0 8px; }
+  #authSubmit { width: 100%; justify-content: center; }
 </style>
 </head>
 <body>
@@ -146,6 +158,7 @@
   <div class="spacer"></div>
   <div class="actions">
     <span id="netStatus" style="font-size:12px;color:var(--muted);align-self:center"><span class="net-dot"></span>已连接</span>
+    <span id="userBox" style="display:none;font-size:13px;color:var(--muted);align-self:center"><b id="userName" style="color:var(--text)"></b> <button class="btn sm ghost" id="btnLogout">退出</button></span>
     <button class="btn ghost" id="btnImport" title="导入 JSON 备份">导入</button>
     <button class="btn ghost" id="btnExportMd">导出日报 Markdown</button>
     <button class="btn ghost" id="btnExportJson">导出 JSON</button>
@@ -244,8 +257,24 @@
 </div>
 
 <input type="file" id="fileInput" accept="application/json" style="display:none">
+
+<div class="auth-mask open" id="authMask">
+  <div class="auth-card">
+    <div class="logo"><span class="dot">📋</span><span>日报工作台</span></div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" data-atab="login">登录</button>
+      <button class="auth-tab" data-atab="register">注册</button>
+    </div>
+    <div class="field"><label>用户名</label><input id="authUser" placeholder="3-20 位" autocomplete="username"></div>
+    <div class="field"><label>密码</label><input id="authPwd" type="password" placeholder="至少 6 位" autocomplete="current-password"></div>
+    <div id="authErr"></div>
+    <button class="btn primary" id="authSubmit">登录</button>
+    <div class="hint" style="text-align:center;margin-top:12px" id="authHint">首次使用请先「注册」一个账号，数据仅你自己可见。</div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
-<div class="footer-note">数据会自动保存：连上本地服务时存于服务端磁盘（多设备共享）；纯静态/离线时存于当前浏览器（仅本机本浏览器）。建议用「导出 JSON」定期备份。</div>
+<div class="footer-note">数据按账号隔离，登录后存于服务端磁盘（多设备可访问你自己的日报，互不干扰）；未连服务时存于当前浏览器。建议用「导出 JSON」定期备份。</div>
 
 <script>
 (function(){
@@ -256,23 +285,73 @@
   /* ---------- api（支持服务端 / 浏览器本地 双模式） ---------- */
   var MODE = null; // 'server' | 'local'
   var LS_KEY = "drb_local_v1";
+  var TOKEN_KEY = "drb_token";
+  var USER_KEY = "drb_user";
+  var authMode = "login";
+  var TOKEN = localStorage.getItem(TOKEN_KEY) || null;
+  var USER = (function(){ try { return JSON.parse(localStorage.getItem(USER_KEY)||"null"); } catch(e){ return null; } })();
+
   function loadLocal(){ try { return JSON.parse(localStorage.getItem(LS_KEY)||"[]"); } catch(e){ return []; } }
   function saveLocal(arr){ try { localStorage.setItem(LS_KEY, JSON.stringify(arr)); } catch(e){} }
+  function authHeader(){ return TOKEN ? { "Authorization": "Bearer " + TOKEN } : {}; }
+  function applyAuth(token, user){ TOKEN = token; USER = user; localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(USER_KEY, JSON.stringify(user)); }
+  function showAuth(){ var m=$("authMask"); if(m) m.classList.add("open"); }
+  function hideAuth(){ var m=$("authMask"); if(m) m.classList.remove("open"); }
+  function logout(){
+    TOKEN=null; USER=null;
+    localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY);
+    MODE="server"; showAuth(); setNet();
+  }
+
   function apiList(){
     if (MODE === "local") return Promise.resolve(loadLocal());
-    return fetch(API).then(function(r){ if(!r.ok) throw new Error(); return r.json(); });
+    return fetch(API, { headers: authHeader() }).then(function(r){
+      if (r.status === 401){ logout(); throw new Error("unauthorized"); }
+      if (!r.ok) throw new Error(); return r.json();
+    });
   }
   function apiCreate(r){
     if (MODE === "local"){ var a=loadLocal(); r.id=r.id||uid(); a.push(r); saveLocal(a); return Promise.resolve(r); }
-    return fetch(API, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(r) }).then(function(r){ return r.json(); });
+    return fetch(API, { method:"POST", headers:Object.assign({"Content-Type":"application/json"}, authHeader()), body: JSON.stringify(r) }).then(function(r){
+      if (r.status === 401){ logout(); throw new Error("unauthorized"); }
+      if (!r.ok) throw new Error(); return r.json();
+    });
   }
   function apiUpdate(r){
     if (MODE === "local"){ var a=loadLocal(); var i=a.findIndex(function(x){return x.id===r.id;}); if(i>=0) a[i]=r; saveLocal(a); return Promise.resolve(r); }
-    return fetch(API+"/"+r.id, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(r) }).then(function(r){ return r.json(); });
+    return fetch(API+"/"+r.id, { method:"PUT", headers:Object.assign({"Content-Type":"application/json"}, authHeader()), body: JSON.stringify(r) }).then(function(r){
+      if (r.status === 401){ logout(); throw new Error("unauthorized"); }
+      if (!r.ok) throw new Error(); return r.json();
+    });
   }
   function apiDelete(id){
     if (MODE === "local"){ saveLocal(loadLocal().filter(function(x){return x.id!==id;})); return Promise.resolve({ok:true}); }
-    return fetch(API+"/"+id, { method:"DELETE" }).then(function(r){ return r.json(); });
+    return fetch(API+"/"+id, { method:"DELETE", headers: authHeader() }).then(function(r){
+      if (r.status === 401){ logout(); throw new Error("unauthorized"); }
+      if (!r.ok) throw new Error(); return r.json();
+    });
+  }
+  function apiMe(){
+    return new Promise(function(resolve, reject){
+      fetch("/api/auth/me", { headers: authHeader() })
+        .then(function(r){
+          if (r.status === 401) return reject({ status: 401 });
+          if (!r.ok) return reject({ status: r.status });
+          return r.json();
+        })
+        .then(function(data){ resolve(data.user); })
+        .catch(function(err){ if (err && err.status) return reject(err); return reject({ status: 0 }); });
+    });
+  }
+  function doLogin(username, password){
+    return fetch("/api/auth/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({username:username,password:password}) })
+      .then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+      .then(function(x){ if(!x.ok) throw new Error((x.d&&x.d.error)||"用户名或密码错误"); applyAuth(x.d.token, x.d.user); return x.d; });
+  }
+  function doRegister(username, password){
+    return fetch("/api/auth/register", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({username:username,password:password}) })
+      .then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
+      .then(function(x){ if(!x.ok) throw new Error((x.d&&x.d.error)||"注册失败"); applyAuth(x.d.token, x.d.user); return x.d; });
   }
   function reload(){
     apiList().then(function(arr){
@@ -282,8 +361,8 @@
   }
   function setNet(){
     var el=$("netStatus"); if(!el) return;
-    if (MODE === "local") el.innerHTML = '<span class="net-dot off" style="background:#d97706"></span>本地模式';
-    else el.innerHTML = '<span class="net-dot"></span>已连接';
+    if (MODE === "local"){ el.innerHTML = '<span class="net-dot off" style="background:#d97706"></span>本地模式'; $("userBox").style.display="none"; }
+    else { el.innerHTML = '<span class="net-dot"></span>已连接'; if (USER){ $("userBox").style.display=""; $("userName").textContent = USER.username; } else { $("userBox").style.display="none"; } }
   }
 
   /* ---------- helpers ---------- */
@@ -738,6 +817,30 @@
       var f=state.weekData.from, t=state.weekData.to;
       download("周报_"+f+"~"+t+".md", state.weekMarkdown, "text/markdown");
     };
+
+    /* 认证界面 */
+    $("authSubmit").onclick = function(){
+      var u = $("authUser").value.trim(), p = $("authPwd").value;
+      if (u.length < 3){ $("authErr").textContent = "用户名至少 3 位"; return; }
+      if (p.length < 6){ $("authErr").textContent = "密码至少 6 位"; return; }
+      var fn = (authMode === "login") ? doLogin : doRegister;
+      fn(u, p).then(function(){
+        hideAuth(); setNet(); reload();
+        toast(authMode === "login" ? "欢迎回来" : "注册成功，开始记录吧");
+      }).catch(function(e){ $("authErr").textContent = e.message || "操作失败"; });
+    };
+    $("authUser").addEventListener("keydown", function(e){ if (e.key === "Enter") $("authPwd").focus(); });
+    $("authPwd").addEventListener("keydown", function(e){ if (e.key === "Enter") $("authSubmit").click(); });
+    document.querySelectorAll(".auth-tab").forEach(function(t){
+      t.onclick = function(){
+        authMode = t.getAttribute("data-atab");
+        document.querySelectorAll(".auth-tab").forEach(function(x){ x.classList.remove("active"); });
+        t.classList.add("active");
+        $("authSubmit").textContent = (authMode === "login") ? "登录" : "注册并进入";
+        $("authErr").textContent = "";
+      };
+    });
+    $("btnLogout").onclick = logout;
   }
   function fallbackCopy(){
     var ta=document.createElement("textarea"); ta.value=state.weekMarkdown; document.body.appendChild(ta); ta.select();
@@ -750,11 +853,22 @@
   document.documentElement.setAttribute("data-theme", savedTheme);
   var w0 = weekRange(); $("wkFrom").value = w0.from; $("wkTo").value = w0.to;
   bind();
-  // 探测后端：可用则服务端持久化模式；不可用（如纯静态部署）自动切到浏览器本地存储
-  Promise.resolve().then(function(){
-    return fetch(API).then(function(r){ if(!r.ok) throw 0; MODE="server"; })
-                     .catch(function(){ MODE="local"; });
-  }).then(function(){ reload(); });
+  // 探测后端 + 登录态：
+  //  - 后端可达且 token 有效 → 服务端模式，直接进入
+  //  - 后端可达但需登录(401) → 服务端模式，显示登录页
+  //  - 网络不可达 → 本地模式（无需登录，数据存浏览器）
+  apiMe().then(function(user){
+    MODE = "server"; USER = user; localStorage.setItem(USER_KEY, JSON.stringify(user));
+    hideAuth(); setNet(); reload();
+  }).catch(function(err){
+    if (err && err.status === 0){
+      MODE = "local"; TOKEN=null; USER=null; hideAuth(); setNet(); reload();
+    } else {
+      MODE = "server"; TOKEN=null; USER=null;
+      localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY);
+      showAuth(); setNet();
+    }
+  });
 })();
 </script>
 </body>
