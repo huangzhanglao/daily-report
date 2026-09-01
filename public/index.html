@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>日报工作台</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --panel-2: #fbfcfe;
+    --text: #1f2329; --muted: #8a9099; --primary: #3b6cff;
+    --primary-weak: #eaf0ff; --border: #e6e8eb; --danger: #e5484d;
+    --ok: #2ba471; --tag-bg: #eef1f5;
+    --shadow: 0 1px 3px rgba(20,30,50,.06), 0 6px 18px rgba(20,30,50,.05);
+    --radius: 14px;
+  }
+  [data-theme="dark"] {
+    --bg: #15171c; --panel: #1e2128; --panel-2: #23262f;
+    --text: #e8eaed; --muted: #9aa0aa; --primary: #5a82ff;
+    --primary-weak: #23304f; --border: #2c3038; --danger: #ff6166;
+    --ok: #3ec98a; --tag-bg: #2a2e37;
+    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.25);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; -webkit-font-smoothing: antialiased; }
+  button { font-family: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 7px 14px; border-radius: 9px; font-size: 13px; transition: .15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { border-color: var(--primary); color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.05); color: #fff; }
+  .btn.ghost { background: transparent; }
+  .btn.sm { padding: 4px 10px; font-size: 12px; }
+
+  header.topbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 14px; padding: 12px 22px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .logo { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+  .logo .dot { width: 26px; height: 26px; border-radius: 8px; background: linear-gradient(135deg,#3b6cff,#7aa0ff); display: grid; place-items: center; color: #fff; font-size: 14px; }
+  .topbar .spacer { flex: 1; }
+  .topbar .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .net-dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--ok); margin-right:4px; }
+  .net-dot.off { background: var(--danger); }
+
+  .tabs { display: flex; gap: 4px; padding: 0 22px; background: var(--panel); border-bottom: 1px solid var(--border); }
+  .tab { padding: 11px 16px; border: none; background: transparent; color: var(--muted); font-size: 14px; border-bottom: 2px solid transparent; }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+
+  main { max-width: 1080px; margin: 0 auto; padding: 22px; }
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+  .search { flex: 1; min-width: 220px; position: relative; }
+  .search input { width: 100%; padding: 9px 12px 9px 34px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel); color: var(--text); font-size: 14px; }
+  .search input:focus { outline: none; border-color: var(--primary); }
+  .search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); opacity: .5; }
+  .filter-date { display: flex; gap: 6px; align-items: center; }
+  .filter-date input, .filter-date select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); }
+
+  .cards { display: flex; flex-direction: column; gap: 20px; }
+  .day-group { }
+  .day-head { display: flex; align-items: center; gap: 10px; margin: 0 2px 10px; }
+  .day-badge { font-weight: 700; font-size: 15px; }
+  .day-wk { color: var(--muted); font-size: 13px; }
+  .day-list { display: flex; flex-direction: column; gap: 12px; }
+
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
+  .card-head { display: flex; align-items: flex-start; gap: 12px; }
+  .card-ops { margin-left: auto; display: flex; gap: 4px; }
+  .iconbtn { border: none; background: transparent; color: var(--muted); padding: 5px 8px; border-radius: 7px; font-size: 13px; }
+  .iconbtn:hover { background: var(--tag-bg); color: var(--text); }
+  .points { margin: 10px 0 0; padding: 0; list-style: none; counter-reset: pts; }
+  .points li { position: relative; padding: 3px 0 3px 26px; color: var(--text); word-break: break-word; white-space: pre-wrap; counter-increment: pts; }
+  .points li::before { content: counter(pts) "."; position: absolute; left: 4px; color: var(--primary); font-weight: 700; }
+  /* 分点输入编辑器 */
+  .pt-wrap { display: flex; flex-direction: column; gap: 8px; }
+  .pt-row { display: flex; align-items: center; gap: 8px; counter-increment: ptr; }
+  .pt-no { flex: none; width: 22px; text-align: right; color: var(--muted); font-size: 13px; user-select: none; }
+  .pt-no::before { content: counter(ptr) "."; }
+  .pt-input { flex: 1; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-2); color: var(--text); font-size: 14px; font-family: inherit; }
+  .pt-input:focus { outline: none; border-color: var(--primary); }
+  .pt-del { flex: none; border: none; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; padding: 4px 8px; border-radius: 7px; }
+  .pt-del:hover { background: var(--tag-bg); color: var(--danger); }
+
+  .slot-badge { flex: none; font-size: 12px; padding: 3px 9px; border-radius: 7px; font-weight: 600; white-space: nowrap; }
+  .slot-morning { background: #fff3e0; color: #d97706; }
+  .slot-afternoon { background: #e0f0ff; color: #1f7ae0; }
+  .slot-full { background: var(--tag-bg); color: var(--text); }
+  [data-theme="dark"] .slot-morning { background: #3a2e1a; color: #f0b860; }
+  [data-theme="dark"] .slot-afternoon { background: #1a2c3a; color: #7ab8f0; }
+
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty .big { font-size: 46px; margin-bottom: 10px; }
+
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px,1fr)); gap: 14px; margin-bottom: 22px; }
+  .stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+  .stat .num { font-size: 28px; font-weight: 700; color: var(--primary); }
+  .stat .lbl { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .panel-box { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; box-shadow: var(--shadow); margin-bottom: 18px; }
+  .panel-box h3 { margin: 0 0 14px; font-size: 15px; }
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 140px; padding-top: 10px; }
+  .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+  .bar { width: 70%; max-width: 22px; background: var(--primary); border-radius: 4px 4px 0 0; min-height: 2px; transition: .2s; }
+  .bar.zero { background: var(--border); }
+  .bar-label { font-size: 9px; color: var(--muted); transform: rotate(-45deg); white-space: nowrap; }
+
+  /* weekly */
+  .wk-day { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 14px; box-shadow: var(--shadow); }
+  .wk-day-head { font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .wk-row { display: flex; gap: 12px; padding: 10px 0; border-top: 1px dashed var(--border); }
+  .wk-row:first-of-type { border-top: none; }
+  .wk-inc { flex: none; display: flex; align-items: flex-start; gap: 5px; font-size: 13px; color: var(--muted); padding-top: 6px; }
+  .wk-inc input { margin-top: 3px; }
+  .wk-row-main { flex: 1; min-width: 0; }
+  .wk-meta { margin-bottom: 6px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .wk-self { font-size: 12px; color: var(--muted); background: var(--tag-bg); border-radius: 7px; padding: 5px 9px; margin-bottom: 6px; white-space: pre-wrap; word-break: break-word; }
+  .wk-self b { color: var(--muted); font-weight: 600; }
+  .wk-txt { width: 100%; min-height: 56px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-2); color: var(--text); font-family: inherit; font-size: 13px; line-height: 1.6; resize: vertical; }
+  .wk-txt:focus { outline: none; border-color: var(--primary); }
+  #weekPreview { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 14px; max-height: 380px; overflow: auto; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+  .wk-hint { color: var(--muted); font-size: 12px; margin: 0 0 14px; }
+
+  /* modal */
+  .modal-mask { position: fixed; inset: 0; background: rgba(15,20,30,.45); display: none; align-items: flex-start; justify-content: center; z-index: 50; padding: 40px 16px; overflow: auto; }
+  .modal-mask.open { display: flex; }
+  .modal { background: var(--panel); width: 100%; max-width: 560px; border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+  .modal-head { padding: 18px 22px; border-bottom: 1px solid var(--border); display: flex; align-items: center; }
+  .modal-head h2 { margin: 0; font-size: 17px; }
+  .modal-head .x { margin-left: auto; border: none; background: none; font-size: 22px; color: var(--muted); cursor: pointer; line-height: 1; }
+  .modal-body { padding: 20px 22px; }
+  .field { margin-bottom: 15px; }
+  .field label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .field input, .field textarea, .field select { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); color: var(--text); font-size: 14px; font-family: inherit; }
+  .field textarea { min-height: 180px; resize: vertical; line-height: 1.7; }
+  .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--primary); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; white-space: pre-line; }
+  .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1f2329; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .25s; z-index: 80; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .footer-note { text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
+  .img-preview { max-width: 100%; border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="logo"><span class="dot">📋</span><span>日报工作台</span></div>
+  <div class="spacer"></div>
+  <div class="actions">
+    <span id="netStatus" style="font-size:12px;color:var(--muted);align-self:center"><span class="net-dot"></span>已连接</span>
+    <button class="btn ghost" id="btnImport" title="导入 JSON 备份">导入</button>
+    <button class="btn ghost" id="btnExportMd">导出日报 Markdown</button>
+    <button class="btn ghost" id="btnExportJson">导出 JSON</button>
+    <button class="btn" id="btnTheme" title="切换主题">🌓</button>
+    <button class="btn primary" id="btnNew">+ 写日报</button>
+  </div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-view="list">全部日报</button>
+  <button class="tab" data-view="stats">统计</button>
+  <button class="tab" data-view="week">周报</button>
+</nav>
+
+<main>
+  <section class="view active" id="view-list">
+    <div class="toolbar">
+      <div class="search">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="searchInput" placeholder="搜索日报内容…">
+      </div>
+      <div class="filter-date">
+        <input type="date" id="dateFrom">
+        <span style="color:var(--muted)">至</span>
+        <input type="date" id="dateTo">
+      </div>
+      <button class="btn ghost" id="btnClearFilter">清除筛选</button>
+    </div>
+    <div class="cards" id="cards"></div>
+  </section>
+
+  <section class="view" id="view-stats">
+    <div class="stat-grid" id="statGrid"></div>
+    <div class="panel-box">
+      <h3>最近 30 天日报段数</h3>
+      <div class="bars" id="bars"></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-week">
+    <div class="toolbar">
+      <div class="filter-date">
+        <span style="color:var(--muted)">周期</span>
+        <input type="date" id="wkFrom">
+        <span style="color:var(--muted)">至</span>
+        <input type="date" id="wkTo">
+      </div>
+      <button class="btn ghost" id="btnWkThis">本周</button>
+      <button class="btn primary" id="btnWkLoad">载入日报</button>
+      <button class="btn" id="btnWkGen">生成周报</button>
+      <button class="btn" id="btnWkImg">导出周报图片</button>
+    </div>
+    <p class="wk-hint">先选好要汇报的周期（可点「本周」自动填充），点「载入日报」会把这段时间你写的内容按「每条点」列出。每条左边勾选「包含」，右边文本框可<b>改写内容</b>——比如给自己记了「完成 70%」，给领导只写「推进 30%」。点「生成周报」预览，再「导出周报图片」生成可发送的长图。改写会保存到服务端，下次不用重复改。</p>
+    <div id="weekEditor"></div>
+    <div class="panel-box" id="weekPreviewBox" style="display:none">
+      <h3>周报预览</h3>
+      <div class="row2">
+        <div class="field"><label>周报标题</label><input id="wkTitle"></div>
+        <div class="field"><label>汇报人（可选）</label><input id="wkAuthor" placeholder="例如 张三"></div>
+      </div>
+      <pre id="weekPreview"></pre>
+      <div style="display:flex; gap:10px; margin-top:12px">
+        <button class="btn" id="btnWkCopy">复制周报</button>
+        <button class="btn" id="btnWkMd">导出 Markdown</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="modal-mask" id="modalMask">
+  <div class="modal">
+    <div class="modal-head"><h2 id="modalTitle">写日报</h2><button class="x" id="modalClose">×</button></div>
+    <div class="modal-body">
+      <div class="row2">
+        <div class="field"><label>日期</label><input type="date" id="fDate"></div>
+        <div class="field"><label>时段</label>
+          <select id="fSlot">
+            <option value="morning">🌅 上午</option>
+            <option value="afternoon">🌇 下午</option>
+            <option value="full">📅 全天</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>内容（分点填写，每条一项）</label>
+        <div id="fPointsWrap" class="pt-wrap"></div>
+        <button type="button" class="btn sm ghost" id="btnAddPoint" style="margin-top:8px">+ 添加要点</button>
+        <div class="hint">上午、下午各记一段，下面按 1、2、3… 逐条写做的事（回车自动加下一行）。&#10;日报主要给自己看，放心写；周报时再挑重点、改成汇报口径。</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="btnCancel">取消</button>
+      <button class="btn primary" id="btnSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="application/json" style="display:none">
+<div class="toast" id="toast"></div>
+<div class="footer-note">数据会自动保存：连上本地服务时存于服务端磁盘（多设备共享）；纯静态/离线时存于当前浏览器（仅本机本浏览器）。建议用「导出 JSON」定期备份。</div>
+
+<script>
+(function(){
+  "use strict";
+  var API = "/api/reports";
+  var state = { reports: [], filter: { keyword: "", from: "", to: "" }, editingId: null, weekMarkdown: "", weekData: null, weekPoints: [] };
+
+  /* ---------- api（支持服务端 / 浏览器本地 双模式） ---------- */
+  var MODE = null; // 'server' | 'local'
+  var LS_KEY = "drb_local_v1";
+  function loadLocal(){ try { return JSON.parse(localStorage.getItem(LS_KEY)||"[]"); } catch(e){ return []; } }
+  function saveLocal(arr){ try { localStorage.setItem(LS_KEY, JSON.stringify(arr)); } catch(e){} }
+  function apiList(){
+    if (MODE === "local") return Promise.resolve(loadLocal());
+    return fetch(API).then(function(r){ if(!r.ok) throw new Error(); return r.json(); });
+  }
+  function apiCreate(r){
+    if (MODE === "local"){ var a=loadLocal(); r.id=r.id||uid(); a.push(r); saveLocal(a); return Promise.resolve(r); }
+    return fetch(API, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(r) }).then(function(r){ return r.json(); });
+  }
+  function apiUpdate(r){
+    if (MODE === "local"){ var a=loadLocal(); var i=a.findIndex(function(x){return x.id===r.id;}); if(i>=0) a[i]=r; saveLocal(a); return Promise.resolve(r); }
+    return fetch(API+"/"+r.id, { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(r) }).then(function(r){ return r.json(); });
+  }
+  function apiDelete(id){
+    if (MODE === "local"){ saveLocal(loadLocal().filter(function(x){return x.id!==id;})); return Promise.resolve({ok:true}); }
+    return fetch(API+"/"+id, { method:"DELETE" }).then(function(r){ return r.json(); });
+  }
+  function reload(){
+    apiList().then(function(arr){
+      state.reports = (arr||[]).map(normalize);
+      renderList(); renderStats(); setNet();
+    }).catch(function(){ setNet(); renderList(); renderStats(); if (MODE==="server") toast("无法连接服务，请确认服务已启动"); });
+  }
+  function setNet(){
+    var el=$("netStatus"); if(!el) return;
+    if (MODE === "local") el.innerHTML = '<span class="net-dot off" style="background:#d97706"></span>本地模式';
+    else el.innerHTML = '<span class="net-dot"></span>已连接';
+  }
+
+  /* ---------- helpers ---------- */
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function today(){ var d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function pad(n){ return (n<10?"0":"")+n; }
+  function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+  function weekday(d){ var p=d.split("-"); var dt=new Date(p[0],p[1]-1,p[2]); return "周"+"日一二三四五六"[dt.getDay()]; }
+  function slotLabel(s){ return s==="afternoon"?"🌇 下午":s==="full"?"📅 全天":"🌅 上午"; }
+  function slotShort(s){ return s==="afternoon"?"下午":s==="full"?"全天":"上午"; }
+  function toast(msg){ var t=$("toast"); t.textContent=msg; t.className="toast show"; clearTimeout(t._t); t._t=setTimeout(function(){ t.className="toast"; },1800); }
+
+  // 兼容旧数据 / 保证结构统一
+  function normalize(r){
+    if (!r.points || !r.points.length){
+      var arr=[];
+      if (r.content){ r.content.split("\n").map(function(s){return s.trim();}).filter(Boolean).forEach(function(t){ arr.push({id:uid(),text:t,report:""}); }); }
+      if (!arr.length && r.title){ arr.push({id:uid(),text:r.title,report:""}); }
+      r.points = arr;
+    }
+    if (!r.slot) r.slot = "morning";
+    return r;
+  }
+
+  /* ---------- filtering ---------- */
+  function filtered(){
+    var kw = state.filter.keyword.toLowerCase();
+    var f = state.filter.from, t = state.filter.to;
+    return state.reports.filter(function(r){
+      if (f && r.date < f) return false;
+      if (t && r.date > t) return false;
+      if (kw){
+        var hay = (r.points||[]).map(function(p){return p.text;}).join(" ").toLowerCase();
+        if (hay.indexOf(kw) === -1) return false;
+      }
+      return true;
+    }).sort(function(a,b){ return a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt||0)-(a.createdAt||0); });
+  }
+
+  /* ---------- render list (grouped by day) ---------- */
+  function renderList(){
+    var list = filtered();
+    var box = $("cards");
+    if (!state.reports.length){
+      box.innerHTML = '<div class="empty"><div class="big">🗒️</div>还没有日报，点击右上角「+ 写日报」开始记录吧。</div>';
+      return;
+    }
+    if (!list.length){
+      box.innerHTML = '<div class="empty"><div class="big">🔍</div>没有符合筛选条件的日报。</div>';
+      return;
+    }
+    var groups = {};
+    list.forEach(function(r){ (groups[r.date]=groups[r.date]||[]).push(r); });
+    var dates = Object.keys(groups).sort().reverse();
+    var html = dates.map(function(d){
+      var items = groups[d];
+      var rows = items.map(function(r){
+        var points = (r.points||[]).map(function(p){ return '<li>'+esc(p.text)+'</li>'; }).join("");
+        return '<div class="card">'+
+          '<div class="card-head">'+
+            '<span class="slot-badge slot-'+(r.slot||"morning")+'">'+slotLabel(r.slot)+'</span>'+
+            '<div class="card-ops">'+
+              '<button class="iconbtn" data-edit="'+r.id+'">编辑</button>'+
+              '<button class="iconbtn" data-del="'+r.id+'">删除</button>'+
+            '</div>'+
+          '</div>'+
+          (points ? '<ul class="points">'+points+'</ul>' : '')+
+        '</div>';
+      }).join("");
+      return '<div class="day-group">'+
+        '<div class="day-head">'+
+          '<span class="day-badge">'+d.slice(5).replace("-",".")+'</span>'+
+          '<span class="day-wk">'+weekday(d)+'</span>'+
+          '<span style="flex:1"></span>'+
+          '<button class="btn sm ghost" data-add="'+d+'">+ 加一段</button>'+
+        '</div>'+
+        '<div class="day-list">'+rows+'</div>'+
+      '</div>';
+    }).join("");
+    box.innerHTML = html;
+  }
+
+  /* ---------- render stats ---------- */
+  function renderStats(){
+    var rs = state.reports;
+    var total = rs.length;
+    var daySet = {}; var ptCount = 0;
+    rs.forEach(function(r){ daySet[r.date]=1; ptCount += (r.points||[]).length; });
+    var activeDays = Object.keys(daySet).length;
+    var avg = activeDays ? (ptCount/activeDays).toFixed(1) : 0;
+    $("statGrid").innerHTML =
+      stat(total,"日报段数")+
+      stat(activeDays,"覆盖天数")+
+      stat(ptCount,"要点总数")+
+      stat(avg,"日均要点");
+    var days = {};
+    rs.forEach(function(r){ days[r.date]=(days[r.date]||0)+1; });
+    var bars=""; var base=new Date(); base.setDate(base.getDate()-29);
+    for (var i=0;i<30;i++){
+      var d=new Date(base); d.setDate(base.getDate()+i);
+      var key=d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
+      var c=days[key]||0; var h=c?Math.max(6,c*22):2;
+      bars+='<div class="bar-col" title="'+key+'：'+(c||0)+' 段"><div class="bar'+(c?"":" zero")+'" style="height:'+h+'px"></div><div class="bar-label">'+pad(d.getDate())+'</div></div>';
+    }
+    $("bars").innerHTML = bars;
+  }
+  function stat(n,l){ return '<div class="stat"><div class="num">'+n+'</div><div class="lbl">'+l+'</div></div>'; }
+
+  /* ---------- modal ---------- */
+  function openForm(id, presetDate){
+    state.editingId = id || null;
+    $("modalTitle").textContent = id ? "编辑日报" : "写日报";
+    if (id){
+      var r = state.reports.find(function(x){ return x.id===id; });
+      if (!r) return;
+      $("fDate").value=r.date; $("fSlot").value=r.slot||"morning";
+      renderPointsEditor((r.points||[]).map(function(p){return p.text;}));
+    } else {
+      var d = presetDate || today();
+      var hasMorning = state.reports.some(function(r){ return r.date===d && (r.slot||"morning")==="morning"; });
+      var hasAfternoon = state.reports.some(function(r){ return r.date===d && r.slot==="afternoon"; });
+      var defSlot = (!hasMorning) ? "morning" : (!hasAfternoon ? "afternoon" : "morning");
+      $("fDate").value=d; $("fSlot").value=defSlot; renderPointsEditor([]);
+    }
+    $("modalMask").classList.add("open");
+    setTimeout(function(){ var f=$("fPointsWrap").querySelector(".pt-input"); if(f) f.focus(); }, 50);
+  }
+  function closeForm(){ $("modalMask").classList.remove("open"); state.editingId=null; }
+  function renderPointsEditor(texts){
+    var wrap = $("fPointsWrap"); wrap.innerHTML = "";
+    if (!texts || !texts.length) texts = [""];
+    texts.forEach(function(t){ addPointRow(t); });
+  }
+  function addPointRow(val){
+    var wrap = $("fPointsWrap");
+    var row = document.createElement("div"); row.className = "pt-row";
+    var no = document.createElement("div"); no.className = "pt-no";
+    var input = document.createElement("input");
+    input.className = "pt-input"; input.type = "text"; input.placeholder = "例如：完成登录模块开发";
+    input.value = val || "";
+    var del = document.createElement("button");
+    del.type = "button"; del.className = "pt-del"; del.textContent = "×";
+    del.onclick = function(){ row.remove(); if (!wrap.children.length) addPointRow(""); };
+    input.addEventListener("keydown", function(e){
+      if (e.key === "Enter"){ e.preventDefault(); addPointRow(""); var last = wrap.lastChild.querySelector(".pt-input"); if (last) last.focus(); }
+    });
+    row.appendChild(no); row.appendChild(input); row.appendChild(del);
+    wrap.appendChild(row);
+  }
+  function readPoints(){
+    var arr = [];
+    $("fPointsWrap").querySelectorAll(".pt-input").forEach(function(inp){
+      var v = inp.value.trim(); if (v) arr.push(v);
+    });
+    return arr;
+  }
+  function saveForm(){
+    var date = $("fDate").value || today();
+    var slot = $("fSlot").value;
+    var lines = readPoints();
+    if (!lines.length){ toast("至少写一条内容"); return; }
+    var oldPoints = state.editingId ? ((state.reports.find(function(x){return x.id===state.editingId;})||{}).points||[]) : [];
+    var map = {};
+    oldPoints.forEach(function(p){ map[p.text] = (p.report!=null?p.report:""); });
+    var points = lines.map(function(l){ return { id: uid(), text:l, report: (map[l]!=null?map[l]:"") }; });
+    var report = { date:date, slot:slot, points:points };
+    var p;
+    if (state.editingId){ report.id = state.editingId; p = apiUpdate(report); }
+    else { p = apiCreate(report); }
+    p.then(function(){ closeForm(); reload(); toast("已保存"); })
+     .catch(function(){ toast("保存失败，请检查服务连接"); });
+  }
+
+  /* ---------- export / import ---------- */
+  function download(name, content, type){
+    var blob = new Blob([content], { type: type+";charset=utf-8" });
+    var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 100);
+  }
+  function exportJSON(){ download("日报备份_"+today()+".json", JSON.stringify(state.reports, null, 2), "application/json"); }
+  function exportMD(){
+    var list = filtered().slice().reverse();
+    if (!list.length){ toast("没有可导出的日报"); return; }
+    var md = "# 日报导出\n\n> 导出时间：" + new Date().toLocaleString("zh-CN") + "\n\n";
+    var groups = {}; list.forEach(function(r){ (groups[r.date]=groups[r.date]||[]).push(r); });
+    Object.keys(groups).sort().reverse().forEach(function(d){
+      md += "## 📅 " + d + " " + weekday(d) + "\n\n";
+      groups[d].forEach(function(r){
+        md += "### " + slotLabel(r.slot) + "\n";
+        (r.points||[]).forEach(function(p){ md += "- " + p.text + "\n"; });
+        md += "\n";
+      });
+    });
+    download("日报_"+today()+".md", md, "text/markdown");
+  }
+  function importJSON(file){
+    var reader = new FileReader();
+    reader.onload = function(){
+      try {
+        var data = JSON.parse(reader.result);
+        if (!Array.isArray(data)) throw new Error("格式错误");
+        if (!confirm("导入将把文件中不存在于当前服务的数据合并进去（按 id 去重）。继续？")) return;
+        var existing = {}; state.reports.forEach(function(r){ existing[r.id]=1; });
+        var proms = data.filter(function(r){ return r && r.id && !existing[r.id]; })
+                        .map(function(r){ return apiCreate(r); });
+        Promise.all(proms).then(function(){ reload(); toast("已导入 "+proms.length+" 条"); })
+               .catch(function(){ toast("导入部分失败"); });
+      } catch(e){ toast("导入失败：不是有效的备份文件"); }
+    };
+    reader.readAsText(file);
+  }
+
+  /* ---------- weekly report ---------- */
+  function weekRange(){
+    var d = new Date(); var day = d.getDay();
+    var diff = (day===0? -6 : 1-day);
+    var mon = new Date(d); mon.setDate(d.getDate()+diff);
+    var sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    return { from: mon.getFullYear()+"-"+pad(mon.getMonth()+1)+"-"+pad(mon.getDate()),
+             to: sun.getFullYear()+"-"+pad(sun.getMonth()+1)+"-"+pad(sun.getDate()) };
+  }
+  function renderWeekEditor(){
+    var from = $("wkFrom").value, to = $("wkTo").value;
+    if (!from || !to){ toast("请先选择起止日期"); return; }
+    if (from > to){ toast("起始日期不能晚于结束日期"); return; }
+    var items = state.reports.filter(function(r){ return r.date>=from && r.date<=to; })
+                .sort(function(a,b){ return a.date<b.date?-1:a.date>b.date?1:0; });
+    if (!items.length){ $("weekEditor").innerHTML = '<div class="empty"><div class="big">📭</div>该周期没有日报，先去写几篇吧。</div>'; $("weekPreviewBox").style.display="none"; return; }
+    var groups = {}; items.forEach(function(r){ (groups[r.date]=groups[r.date]||[]).push(r); });
+    var dates = Object.keys(groups).sort();
+    var pts = [];
+    var html = dates.map(function(d){
+      var rows = [];
+      groups[d].forEach(function(r){
+        (r.points||[]).forEach(function(p){
+          var pid = r.id + "_" + p.id;
+          pts.push({ reportId:r.id, pointId:p.id, date:d, slot:r.slot, text:(p.text||""), report:(p.report!=null?p.report:"") });
+          var slotb = '<span class="slot-badge slot-'+(r.slot||"morning")+'">'+slotLabel(r.slot)+'</span>';
+          rows.push('<div class="wk-row" data-day="'+d+'">'+
+            '<label class="wk-inc"><input type="checkbox" id="wk-inc-'+pid+'" checked> 包含</label>'+
+            '<div class="wk-row-main">'+
+              '<div class="wk-meta">'+slotb+'</div>'+
+              '<div class="wk-self"><b>给自己记：</b>'+esc(p.text||"")+'</div>'+
+              '<textarea class="wk-txt" id="wk-txt-'+pid+'">'+esc(p.report!=null && p.report!=="" ? p.report : p.text)+'</textarea>'+
+            '</div></div>');
+        });
+      });
+      return '<div class="wk-day"><div class="wk-day-head">'+d+' '+weekday(d)+
+        ' <button class="btn sm ghost" data-wkall="'+d+'">本日全选</button>'+
+        ' <button class="btn sm ghost" data-wknone="'+d+'">本日全不选</button></div>'+rows.join("")+'</div>';
+    }).join("");
+    state.weekPoints = pts;
+    if (!$("wkTitle").value) $("wkTitle").value = from.slice(5) + " ~ " + to.slice(5) + " 周报";
+    $("weekEditor").innerHTML = html;
+    $("weekPreviewBox").style.display = "none";
+  }
+  function genWeek(){
+    var from = $("wkFrom").value, to = $("wkTo").value;
+    if (!from || !to){ toast("请先选择起止日期"); return; }
+    if (!state.weekPoints.length){ toast("该周期没有日报"); return; }
+    var changed = [];
+    // 读取每条点的勾选与改写
+    state.weekPoints.forEach(function(p){
+      var pid = p.reportId + "_" + p.pointId;
+      var cb = document.getElementById("wk-inc-"+pid);
+      var ta = document.getElementById("wk-txt-"+pid);
+      p._checked = cb ? cb.checked : false;
+      p._text = (ta ? ta.value : "").trim();
+      if (p._text !== p.text) changed.push(p);
+    });
+    // 按天按点组织
+    var byDay = {};
+    state.weekPoints.forEach(function(p){
+      if (p._checked && p._text){
+        (byDay[p.date]=byDay[p.date]||[]).push({ slot:p.slot, text:p._text });
+      }
+    });
+    var dayKeys = Object.keys(byDay).sort();
+    if (!dayKeys.length){ toast("没有选中任何内容，请在左侧勾选「包含」"); return; }
+    var title = $("wkTitle").value || "周报";
+    var author = $("wkAuthor").value.trim();
+    state.weekData = { title:title, from:from, to:to, author:author, days: dayKeys.map(function(d){ return { date:d, weekday:weekday(d), items:byDay[d] }; }) };
+    var md = "# " + title + "\n\n> 周期：" + from + " ~ " + to + "\n" + (author?"> 汇报人："+author+"\n":"") + "\n";
+    dayKeys.forEach(function(d){
+      md += "## " + d + " " + weekday(d) + "\n\n" +
+        byDay[d].map(function(it){ return "- 【"+slotShort(it.slot)+"】"+it.text; }).join("\n") + "\n\n";
+    });
+    state.weekMarkdown = md;
+    $("weekPreview").textContent = md;
+    $("weekPreviewBox").style.display = "block";
+    toast("周报已生成");
+    // 把改写持久化回服务端
+    if (changed.length) persistReports(changed);
+  }
+  function persistReports(list){
+    var byReport = {};
+    list.forEach(function(p){ (byReport[p.reportId]=byReport[p.reportId]||[]).push(p); });
+    Object.keys(byReport).forEach(function(rid){
+      var r = state.reports.find(function(x){ return x.id===rid; });
+      if (!r) return;
+      byReport[rid].forEach(function(p){
+        var pt = (r.points||[]).find(function(x){ return x.id===p.pointId; });
+        if (pt) pt.report = p._text;
+      });
+      apiUpdate(r);
+    });
+    reload();
+  }
+
+  /* ---------- weekly report image (canvas) ---------- */
+  var SLOT_COLORS = { morning:{bg:"#d97706",fg:"#fff"}, afternoon:{bg:"#1f7ae0",fg:"#fff"}, full:{bg:"#6b7280",fg:"#fff"} };
+  function roundRect(ctx,x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+  function wrapText(ctx, text, maxW1, maxW2){
+    var lines=[], line="", first=true;
+    for (var i=0;i<text.length;i++){
+      var ch=text[i];
+      if (ch==="\n"){ lines.push(line); line=""; first=false; continue; }
+      var test=line+ch; var limit=first?maxW1:maxW2;
+      if (line && ctx.measureText(test).width>limit){ lines.push(line); line=ch; first=false; }
+      else line=test;
+    }
+    if (line!=="" || lines.length===0) lines.push(line);
+    return lines;
+  }
+  function exportWeekImage(){
+    if (!state.weekData || !state.weekData.days.length){ toast("请先生成周报"); return; }
+    var dpr = window.devicePixelRatio || 1;
+    var W = 940, pad = 48, lh = 26, gap = 16, pillW = 84, pillH = 26;
+    var c = document.createElement("canvas");
+    var ctx = c.getContext("2d");
+    var y = pad + 44 + 30 + 18;
+    state.weekData.days.forEach(function(day){
+      y += 46;
+      day.items.forEach(function(it){
+        var text = "【"+slotShort(it.slot)+"】" + it.text;
+        ctx.font = "15px sans-serif";
+        var lines = wrapText(ctx, text, W-pad*2-(pad+pillW+12), W-pad*2);
+        y += Math.max(pillH, lines.length*lh) + gap;
+      });
+    });
+    var H = y + pad;
+    c.width = W*dpr; c.height = H*dpr;
+    ctx.scale(dpr,dpr);
+    ctx.fillStyle = "#ffffff"; ctx.fillRect(0,0,W,H);
+    ctx.textBaseline = "top";
+    var yy = pad;
+    ctx.fillStyle = "#1f2329"; ctx.font = "700 28px sans-serif";
+    ctx.fillText(state.weekData.title, pad, yy); yy += 44;
+    ctx.fillStyle = "#8a9099"; ctx.font = "14px sans-serif";
+    var meta = "周期：" + state.weekData.from + " ~ " + state.weekData.to;
+    if (state.weekData.author) meta += "    汇报人：" + state.weekData.author;
+    ctx.fillText(meta, pad, yy); yy += 30;
+    ctx.strokeStyle = "#e6e8eb"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pad,yy); ctx.lineTo(W-pad,yy); ctx.stroke(); yy += 18;
+    state.weekData.days.forEach(function(day){
+      var label = day.date + " " + day.weekday;
+      ctx.font = "600 15px sans-serif";
+      var dw = ctx.measureText(label).width + 28;
+      roundRect(ctx, pad, yy, dw, 30, 8); ctx.fillStyle = "#3b6cff"; ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.fillText(label, pad+14, yy+7);
+      yy += 46;
+      day.items.forEach(function(it){
+        var text = "【"+slotShort(it.slot)+"】" + it.text;
+        var col = SLOT_COLORS[it.slot] || SLOT_COLORS.full;
+        roundRect(ctx, pad, yy, pillW, pillH, 6); ctx.fillStyle = col.bg; ctx.fill();
+        ctx.fillStyle = col.fg; ctx.font = "600 13px sans-serif"; ctx.textBaseline = "middle";
+        ctx.fillText(slotShort(it.slot), pad+pillW/2, yy+pillH/2); ctx.textBaseline = "top";
+        ctx.fillStyle = "#1f2329"; ctx.font = "15px sans-serif";
+        var lines = wrapText(ctx, text, W-pad*2-(pad+pillW+12), W-pad*2);
+        var tx = pad + pillW + 12;
+        for (var i=0;i<lines.length;i++) ctx.fillText(lines[i], i===0?tx:pad, yy + i*lh);
+        yy += Math.max(pillH, lines.length*lh) + gap;
+      });
+    });
+    c.toBlob(function(blob){
+      if (!blob){ toast("图片生成失败"); return; }
+      var a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = "周报_"+state.weekData.from+"~"+state.weekData.to+".png"; a.click();
+      setTimeout(function(){ URL.revokeObjectURL(a.href); }, 100);
+      toast("周报图片已导出");
+    }, "image/png");
+  }
+
+  /* ---------- events ---------- */
+  function bind(){
+    $("btnNew").onclick = function(){ openForm(); };
+    $("btnAddPoint").onclick = function(){ addPointRow(""); var last=$("fPointsWrap").lastChild.querySelector(".pt-input"); if(last) last.focus(); };
+    $("btnSave").onclick = saveForm;
+    $("btnCancel").onclick = closeForm;
+    $("modalClose").onclick = closeForm;
+    $("modalMask").onclick = function(e){ if (e.target === $("modalMask")) closeForm(); };
+    document.addEventListener("keydown", function(e){ if (e.key==="Escape") closeForm(); });
+
+    $("searchInput").oninput = function(){ state.filter.keyword = this.value; renderList(); };
+    $("dateFrom").onchange = function(){ state.filter.from = this.value; renderList(); };
+    $("dateTo").onchange = function(){ state.filter.to = this.value; renderList(); };
+    $("btnClearFilter").onclick = function(){ state.filter = { keyword:"", from:"", to:"" }; $("searchInput").value=""; $("dateFrom").value=""; $("dateTo").value=""; renderList(); };
+
+    $("cards").onclick = function(e){
+      var add = e.target.closest("[data-add]"); if (add){ openForm(null, add.getAttribute("data-add")); return; }
+      var ed = e.target.closest("[data-edit]"); if (ed){ openForm(ed.getAttribute("data-edit")); return; }
+      var dl = e.target.closest("[data-del]");
+      if (dl){ var id=dl.getAttribute("data-del"); var r=state.reports.find(function(x){return x.id===id;});
+        if (confirm("确定删除这条日报？")){ apiDelete(id).then(function(){ reload(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } return; }
+    };
+
+    document.querySelectorAll(".tab").forEach(function(t){
+      t.onclick = function(){
+        document.querySelectorAll(".tab").forEach(function(x){ x.classList.remove("active"); });
+        t.classList.add("active");
+        var v = t.getAttribute("data-view");
+        $("view-list").classList.toggle("active", v==="list");
+        $("view-stats").classList.toggle("active", v==="stats");
+        $("view-week").classList.toggle("active", v==="week");
+        if (v==="stats") renderStats();
+        if (v==="week") renderWeekEditor();
+      };
+    });
+
+    $("btnExportJson").onclick = exportJSON;
+    $("btnExportMd").onclick = exportMD;
+    $("btnImport").onclick = function(){ $("fileInput").click(); };
+    $("fileInput").onchange = function(e){ if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value=""; };
+
+    $("btnTheme").onclick = function(){
+      var cur = document.documentElement.getAttribute("data-theme");
+      var next = cur==="dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("drb_theme", next);
+    };
+
+    $("btnWkThis").onclick = function(){ var w=weekRange(); $("wkFrom").value=w.from; $("wkTo").value=w.to; renderWeekEditor(); };
+    $("btnWkLoad").onclick = renderWeekEditor;
+    $("btnWkGen").onclick = genWeek;
+    $("btnWkImg").onclick = exportWeekImage;
+    $("weekEditor").onclick = function(e){
+      var all=e.target.closest("[data-wkall]"); var none=e.target.closest("[data-wknone]");
+      if (all || none){
+        var d = all ? all.getAttribute("data-wkall") : none.getAttribute("data-wknone");
+        var cbs = $("weekEditor").querySelectorAll('.wk-row[data-day="'+d+'"] input[type=checkbox]');
+        cbs.forEach(function(cb){ cb.checked = !!all; });
+      }
+    };
+    $("btnWkCopy").onclick = function(){
+      if (!state.weekMarkdown){ toast("请先生成周报"); return; }
+      if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(state.weekMarkdown).then(function(){ toast("周报已复制"); }, fallbackCopy); }
+      else fallbackCopy();
+    };
+    $("btnWkMd").onclick = function(){
+      if (!state.weekMarkdown){ toast("请先生成周报"); return; }
+      var f=state.weekData.from, t=state.weekData.to;
+      download("周报_"+f+"~"+t+".md", state.weekMarkdown, "text/markdown");
+    };
+  }
+  function fallbackCopy(){
+    var ta=document.createElement("textarea"); ta.value=state.weekMarkdown; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); toast("周报已复制"); } catch(e){ toast("复制失败，请手动选择"); }
+    ta.remove();
+  }
+
+  /* ---------- init ---------- */
+  var savedTheme = localStorage.getItem("drb_theme") || "light";
+  document.documentElement.setAttribute("data-theme", savedTheme);
+  var w0 = weekRange(); $("wkFrom").value = w0.from; $("wkTo").value = w0.to;
+  bind();
+  // 探测后端：可用则服务端持久化模式；不可用（如纯静态部署）自动切到浏览器本地存储
+  Promise.resolve().then(function(){
+    return fetch(API).then(function(r){ if(!r.ok) throw 0; MODE="server"; })
+                     .catch(function(){ MODE="local"; });
+  }).then(function(){ reload(); });
+})();
+</script>
+</body>
+</html>

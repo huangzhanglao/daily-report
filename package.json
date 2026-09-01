@@ -1,0 +1,13 @@
+{
+  "name": "daily-report-workbench",
+  "version": "1.0.0",
+  "private": true,
+  "description": "日报工作台：上午/下午分点日报 + 周报生成器（可共享、可导出图片），零依赖 Node 服务",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=16"
+  }
+}
