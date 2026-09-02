@@ -5,6 +5,13 @@ data/
 .DS_Store
 .workbuddy/
 
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
 # 临时校验/测试产物
 ._c.js
 _test_*.js
+_fb_test/

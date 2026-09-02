@@ -1,0 +1,4 @@
+fastapi>=0.110
+uvicorn>=0.27
+# 仅测试用（可选）：python -m pytest 或 fastapi.testclient 需要 httpx
+httpx>=0.27

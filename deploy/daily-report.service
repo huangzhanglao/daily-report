@@ -1,16 +1,16 @@
 [Unit]
-Description=日报工作台 Daily Report Workbench
+Description=日报工作台 Daily Report Workbench (FastAPI)
 After=network.target
 
 [Service]
 Type=simple
 # 改成你上传代码的实际目录
 WorkingDirectory=/opt/daily-report
-# 用 `which node` 查到的结果替换 /usr/bin/node（nvm 安装的路径会不同）
-ExecStart=/usr/bin/node server.js
+# 用虚拟环境里的 uvicorn（先 `python -m venv venv && venv/bin/pip install -r requirements.txt`）
+ExecStart=/opt/daily-report/venv/bin/uvicorn app:app --host 0.0.0.0 --port 8787
 Restart=on-failure
 RestartSec=3
-# 端口与数据目录（数据落在 DATA_DIR，重启不丢）
+# 端口与数据目录（SQLite 库文件落在 DATA_DIR，重启不丢）
 Environment=PORT=8787
 Environment=DATA_DIR=/opt/daily-report/data
 # 若用非 root 用户运行，把下面这行改成对应用户（如 www-data / ubuntu）
