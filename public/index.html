@@ -493,6 +493,16 @@
   var BLOG_API = "/api/blogs";
   var state = { reports: [], filter: { keyword: "", from: "", to: "" }, editingId: null, weekMarkdown: "", weekData: null, weekPoints: [] };
   var noteState = { list: [], filter: "mine", keyword: "", editingId: null };
+  var ALLOW_REGISTER = true; // 是否开放公开注册（由 GET /api/settings 的 allow_register 决定；系统初始化阶段后端仍允许注册首位管理员）
+  (function loadRegisterPolicy(){
+    try {
+      fetch("/api/settings").then(function(r){ return r.json(); }).then(function(j){
+        var s = (j && j.settings) || {};
+        var v = String(s.allow_register || "").toLowerCase();
+        ALLOW_REGISTER = (v === "1" || v === "true");
+      }).catch(function(){ ALLOW_REGISTER = true; });
+    } catch(e){ ALLOW_REGISTER = true; }
+  })();
 
   /* ---------- api（支持服务端 / 浏览器本地 双模式） ---------- */
   var MODE = null; // 'server' | 'local'
@@ -508,7 +518,25 @@
   function saveLocal(arr){ try { localStorage.setItem(LS_KEY, JSON.stringify(arr)); } catch(e){} }
   function authHeader(){ return TOKEN ? { "Authorization": "Bearer " + TOKEN } : {}; }
   function applyAuth(token, user){ TOKEN = token; USER = user; localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(USER_KEY, JSON.stringify(user)); }
-  function showAuth(){ var m=$("authMask"); if(m) m.classList.add("open"); }
+  function applyRegisterPolicy(){
+    var regTab = document.querySelector('.auth-tab[data-atab="register"]');
+    var hint = $("authHint");
+    if (!ALLOW_REGISTER){
+      if (regTab) regTab.style.display = "none";
+      if (hint) hint.textContent = "公开注册已关闭：如需账号，请联系管理员在「设置 → 操作说明」中开启，或由管理员为你创建。";
+      if (authMode === "register"){
+        authMode = "login";
+        if (regTab) regTab.classList.remove("active");
+        var lt = document.querySelector('.auth-tab[data-atab="login"]');
+        if (lt) lt.classList.add("active");
+        var sb = $("authSubmit"); if (sb) sb.textContent = "登录";
+      }
+    } else {
+      if (regTab) regTab.style.display = "";
+      if (hint) hint.textContent = "首次使用请先「注册」一个账号，数据仅你自己可见。";
+    }
+  }
+  function showAuth(){ var m=$("authMask"); if(m) m.classList.add("open"); applyRegisterPolicy(); }
   function hideAuth(){ var m=$("authMask"); if(m) m.classList.remove("open"); }
   function logout(){
     TOKEN=null; USER=null;
@@ -1573,7 +1601,9 @@
     $("authPwd").addEventListener("keydown", function(e){ if (e.key === "Enter") $("authSubmit").click(); });
     document.querySelectorAll(".auth-tab").forEach(function(t){
       t.onclick = function(){
-        authMode = t.getAttribute("data-atab");
+        var tab = t.getAttribute("data-atab");
+        if (tab === "register" && !ALLOW_REGISTER){ toast("公开注册已关闭，请联系管理员开通账号"); return; }
+        authMode = tab;
         document.querySelectorAll(".auth-tab").forEach(function(x){ x.classList.remove("active"); });
         t.classList.add("active");
         $("authSubmit").textContent = (authMode === "login") ? "登录" : "注册并进入";

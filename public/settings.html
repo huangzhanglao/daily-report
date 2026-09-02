@@ -125,6 +125,10 @@
       <label>操作说明（显示在「操作说明」标签页，管理员可编辑）</label>
       <textarea id="setGuide" rows="12"></textarea>
     </div>
+    <div class="field" style="display:flex;align-items:center;gap:8px">
+      <input id="setAllowRegister" type="checkbox" style="width:auto">
+      <label style="margin:0">允许公开注册（关闭后，新用户只能由管理员在「用户管理」中创建）</label>
+    </div>
     <div class="hint">支持纯文本，换行即分段。保存后立即对所有用户生效。</div>
   </section>
 </main>
@@ -386,10 +390,16 @@
       var s = (res.data && res.data.settings) || {};
       $("setHomeIntro").value = s.home_intro || "";
       $("setGuide").value = s.guide || "";
+      var ar = String(s.allow_register || "").toLowerCase();
+      $("setAllowRegister").checked = (ar === "1" || ar === "true");
     });
   }
   $("btnSaveGuide").onclick = function(){
-    api("PUT","/api/admin/settings", { home_intro: $("setHomeIntro").value, guide: $("setGuide").value }).then(function(r){
+    api("PUT","/api/admin/settings", {
+      home_intro: $("setHomeIntro").value,
+      guide: $("setGuide").value,
+      allow_register: $("setAllowRegister").checked ? "1" : "0"
+    }).then(function(r){
       if (r.status===200) toast("已保存，对所有用户立即生效"); else toast("保存失败");
     });
   };

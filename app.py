@@ -267,6 +267,7 @@ DEFAULT_APPS = [
 ]
 
 DEFAULT_SETTINGS = {
+    "allow_register": "0",  # 默认关闭公开注册（防垃圾注册）；系统尚无用户时仍允许注册首位管理员
     "home_intro": "选择你要进入的应用。所有数据按账号隔离存储，安全可追溯。",
     "app_center_title": "🧭 应用中心",
     "guide": (
@@ -443,6 +444,40 @@ def verify_token(token: str):
         return None
 
 
+# ---------- 速率限制 + 注册开关 ----------
+# 说明：内存限流适用于单进程部署（当前 uvicorn 单进程）。若未来多 worker，
+# 需改为 Redis 等共享存储，否则各进程各自计数会放大放行额度。
+_rate_hits = {}
+
+def rate_limit(key: str, max_count: int, window_seconds: int) -> bool:
+    now = time.time()
+    hits = _rate_hits.setdefault(key, [])
+    hits[:] = [t for t in hits if now - t < window_seconds]
+    if len(hits) >= max_count:
+        return False
+    hits.append(now)
+    return True
+
+def client_ip(request: Request) -> str:
+    # 尊重反向代理转发的真实客户端 IP
+    fwd = request.headers.get("x-forwarded-for")
+    if fwd:
+        return fwd.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+def public_register_enabled() -> bool:
+    # 系统尚无任何用户时（首次初始化），允许注册以创建首位管理员；
+    # 一旦存在用户，则依据设置项 allow_register 决定（默认关闭，防垃圾注册）。
+    conn = get_conn()
+    try:
+        cnt = conn.execute("SELECT COUNT(*) AS c FROM users").fetchone()["c"]
+        if cnt == 0:
+            return True
+        row = conn.execute("SELECT value FROM settings_meta WHERE key='allow_register'").fetchone()
+    finally:
+        conn.close()
+    return bool(row and str(row["value"]).strip().lower() in ("1", "true", "on", "yes"))
+
 def get_uid(authorization: str = Header(default="")) -> str:
     m = re.match(r"^Bearer\s+(.+)$", authorization or "", re.I)
     if not m:
@@ -516,7 +551,12 @@ def health():
 
 # ---------------- 认证 ----------------
 @app.post("/api/auth/register")
-async def register(body: dict):
+async def register(body: dict, request: Request):
+    ip = client_ip(request)
+    if not rate_limit("reg:" + ip, 5, 600):
+        raise HTTPException(429, "注册过于频繁，请稍后再试")
+    if not public_register_enabled():
+        raise HTTPException(403, "公开注册已关闭：请联系管理员在「设置 → 操作说明」中开启，或由管理员为你创建账号")
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
     if not (3 <= len(username) <= 20):
@@ -540,7 +580,10 @@ async def register(body: dict):
 
 
 @app.post("/api/auth/login")
-async def login(body: dict):
+async def login(body: dict, request: Request):
+    ip = client_ip(request)
+    if not rate_limit("login:" + ip, 12, 300):
+        raise HTTPException(429, "登录尝试过于频繁，请稍后再试")
     username = (body.get("username") or "").strip()
     password = body.get("password") or ""
     conn = get_conn()
