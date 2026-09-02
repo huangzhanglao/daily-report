@@ -133,6 +133,12 @@
   .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--primary); }
   .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   .hint { font-size: 11px; color: var(--muted); margin-top: 4px; white-space: pre-line; }
+  .paste-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .paste-table th, .paste-table td { border: 1px solid var(--border); padding: 7px 9px; text-align: left; vertical-align: top; }
+  .paste-table th { background: var(--panel-2); color: var(--muted); font-weight: 600; }
+  .paste-table td .pts { white-space: pre-wrap; word-break: break-word; line-height: 1.6; max-height: 120px; overflow: auto; }
+  .paste-table select { padding: 4px 6px; font-size: 12px; }
+  .paste-empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
   .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1f2329; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .25s; z-index: 80; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -242,6 +248,7 @@
         <input type="date" id="dateTo">
       </div>
       <button class="btn ghost" id="btnClearFilter">清除筛选</button>
+      <button class="btn primary" id="btnPasteImport" style="margin-left:auto">📥 智能粘贴导入</button>
     </div>
     <div class="cards" id="cards"></div>
   </section>
@@ -393,6 +400,25 @@
       <div class="bd-content" id="bdContent"></div>
     </div>
     <div class="modal-foot" id="blogDetailFoot"></div>
+  </div>
+</div>
+
+<div class="modal-mask" id="pasteModal">
+  <div class="modal" style="max-width:680px">
+    <div class="modal-head"><h2>📥 智能粘贴导入</h2><button class="x" id="pasteClose">×</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>把内容粘贴到这里（自动识别日期并映射到对应日报）</label>
+        <textarea id="pasteInput" placeholder="支持多种格式，例如：&#10;2026-09-01&#9;完成需求评审&#10;2026-09-02&#9;修复登录 bug&#10;&#10;或：&#10;2026-09-01 上午 - 参加周会&#10;2026-09-01 下午 - 写技术方案&#10;&#10;或：&#10;9月1日&#10;- 要点1&#10;- 要点2"></textarea>
+      </div>
+      <div class="hint">解析规则：日期可在「每行行首」「表格两列（日期⇥内容）」「日期标题+多行要点」中出现；时段默认「全天」，可在下方预览中逐条修改。识别不到日期的行会被忽略。</div>
+      <div id="pastePreview" style="margin-top:14px"></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" id="pasteParse">解析预览</button>
+      <button class="btn ghost" id="pasteCancel">取消</button>
+      <button class="btn primary" id="pasteConfirm">导入选中</button>
+    </div>
   </div>
 </div>
 
@@ -1084,6 +1110,123 @@
     }, "image/png");
   }
 
+  /* ---------- 智能粘贴导入 ---------- */
+  var pasteItems = [];
+  function parseDateToken(s){
+    s = (s||"").trim();
+    var now = new Date(), year = now.getFullYear();
+    var rel = { "今天":0, "今日":0, "昨日":1, "昨天":1, "前天":2 };
+    if (rel[s] != null){ var d = new Date(now); d.setDate(d.getDate() - rel[s]); return { y:d.getFullYear(), m:d.getMonth()+1, d:d.getDate() }; }
+    var m;
+    m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/); if (m) return { y:+m[1], m:+m[2], d:+m[3] };
+    m = s.match(/^(\d{1,2})月(\d{1,2})[日号]?$/); if (m) return { y:year, m:+m[1], d:+m[2] };
+    m = s.match(/^(\d{1,2})[-/.](\d{1,2})$/); if (m) return { y:year, m:+m[1], d:+m[2] };
+    return null;
+  }
+  function fmtYMD(o){ return o.y + "-" + pad(o.m) + "-" + pad(o.d); }
+  function detectSlot(text){
+    if (/上午|早上|AM|am|morning/i.test(text)) return "morning";
+    if (/下午|晚上|傍晚|PM|pm|evening/i.test(text)) return "afternoon";
+    return "full";
+  }
+  function leadingDate(line){
+    var m = line.match(/^((\d{4}[-/.]\d{1,2}[-/.]\d{1,2})|(\d{1,2}月\d{1,2}[日号]?)|(\d{1,2}[-/.]\d{1,2})|(今天|今天|昨日|昨天|前天))/);
+    if (!m) return null;
+    var dt = parseDateToken(m[1]); if (!dt) return null;
+    var rest = line.slice(m[1].length).replace(/^[\s:：、,，\-–—]*|[\-–—]\s*$/g, "").trim();
+    return { date: fmtYMD(dt), rest: rest };
+  }
+  function parsePasted(text){
+    var lines = (text||"").replace(/\r\n/g, "\n").split("\n");
+    var items = [], cur = null;
+    function pushCur(){ if (cur && cur.points.length) items.push(cur); cur = null; }
+    for (var i=0;i<lines.length;i++){
+      var line = lines[i].trim();
+      if (!line) continue;
+      var ld = leadingDate(line);
+      if (ld){
+        pushCur();
+        cur = { date: ld.date, slot: "full", points: [] };
+        if (ld.rest){
+          var slot = detectSlot(ld.rest);
+          var content = ld.rest.replace(/^(上午|下午|早上|晚上|全天|中午)[-:：\s]*/, "").replace(/^[\-\*\•·]\s*/, "");
+          if (content){ cur.slot = slot; cur.points.push(content); }
+        }
+        continue;
+      }
+      var parts = line.split(/\t/);
+      if (parts.length < 2) parts = line.split(/[，,]/);
+      if (parts.length >= 2){
+        var d = parseDateToken(parts[0].trim());
+        if (d){
+          pushCur();
+          var c2 = parts.slice(1).join(parts.length > 2 ? "," : "").trim().replace(/^[\-\*\•·]\s*/, "");
+          if (c2) items.push({ date: fmtYMD(d), slot: detectSlot(c2), points: [c2] });
+          continue;
+        }
+      }
+      var bullet = line.match(/^([\-\*\•·]|\d+[.、])\s*(.*)$/);
+      if (bullet && cur){ var b = bullet[2].trim(); if (b) cur.points.push(b); continue; }
+      if (cur && line) cur.points.push(line);
+    }
+    pushCur();
+    var map = {}, merged = [];
+    items.forEach(function(it){
+      if (!it.points.length) return;
+      var key = it.date + "|" + it.slot;
+      if (map[key]){ it.points.forEach(function(p){ if (map[key].points.indexOf(p) < 0) map[key].points.push(p); }); }
+      else { map[key] = it; merged.push(it); }
+    });
+    return merged;
+  }
+  function renderPastePreview(items){
+    pasteItems = items;
+    var box = $("pastePreview");
+    if (!items.length){ box.innerHTML = '<div class="paste-empty">没有识别到「日期 + 内容」。请确认每行行首是日期，或「日期⇥内容」两列格式。</div>'; return; }
+    var rows = items.map(function(it, idx){
+      var pts = it.points.map(function(p){ return "• " + p; }).join("\n");
+      return '<tr>'+
+        '<td><input type="checkbox" class="pp-sel" data-i="'+idx+'" checked></td>'+
+        '<td>'+esc(it.date)+'</td>'+
+        '<td><select class="pp-slot" data-i="'+idx+'">'+
+          '<option value="morning"'+(it.slot==="morning"?" selected":"")+'>🌅 上午</option>'+
+          '<option value="afternoon"'+(it.slot==="afternoon"?" selected":"")+'>🌇 下午</option>'+
+          '<option value="full"'+(it.slot==="full"?" selected":"")+'>📅 全天</option>'+
+        '</select></td>'+
+        '<td><div class="pts">'+esc(pts)+'</div></td>'+
+      '</tr>';
+    }).join("");
+    box.innerHTML = '<table class="paste-table"><thead><tr><th>导入</th><th>日期</th><th>时段</th><th>内容（分点）</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  }
+  function openPasteModal(){ $("pasteInput").value=""; $("pastePreview").innerHTML=""; $("pasteModal").classList.add("open"); setTimeout(function(){ $("pasteInput").focus(); }, 50); }
+  function importPaste(){
+    var box = $("pastePreview");
+    var list = [];
+    pasteItems.forEach(function(it, idx){
+      var cb = box.querySelector('.pp-sel[data-i="'+idx+'"]');
+      if (cb && cb.checked) list.push({ date: it.date, slot: it.slot, points: it.points.slice() });
+    });
+    if (!list.length){ toast("请至少勾选一条"); return; }
+    apiList().then(function(existing){
+      var arr = existing.slice(), tasks = [];
+      list.forEach(function(it){
+        var found = arr.find(function(r){ return r.date === it.date && r.slot === it.slot; });
+        if (found){
+          var seen = {}; (found.points||[]).forEach(function(p){ seen[(p.text!=null?p.text:p)] = true; });
+          var newPts = (found.points||[]).slice();
+          it.points.forEach(function(t){ if (!seen[t]){ seen[t]=true; newPts.push({ id: uid(), text: t, report: "" }); } });
+          tasks.push(apiUpdate(Object.assign({}, found, { points: newPts })));
+        } else {
+          tasks.push(apiCreate({ date: it.date, slot: it.slot, points: it.points.map(function(t){ return { id: uid(), text: t, report: "" }; }) }));
+        }
+      });
+      return Promise.all(tasks);
+    }).then(function(){
+      $("pasteModal").classList.remove("open");
+      reload(); toast("已导入 " + list.length + " 条日报");
+    }).catch(function(){ toast("导入失败，请检查服务连接"); });
+  }
+
   /* ---------- events ---------- */
   function bind(){
     $("btnNew").onclick = function(){ if (MODE==="server" && !USER){ pendingAuthAction = function(){ openForm(); }; showAuth(); toast("写日报请先登录"); return; } openForm(); };
@@ -1119,6 +1262,15 @@
     $("btnExportMd").onclick = exportMD;
     $("btnImport").onclick = function(){ $("fileInput").click(); };
     $("fileInput").onchange = function(e){ if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value=""; };
+
+    /* 智能粘贴导入 */
+    $("btnPasteImport").onclick = function(){ if (MODE==="server" && !USER){ pendingAuthAction = function(){ openPasteModal(); }; showAuth(); toast("导入日报请先登录"); return; } openPasteModal(); };
+    $("pasteClose").onclick = function(){ $("pasteModal").classList.remove("open"); };
+    $("pasteCancel").onclick = function(){ $("pasteModal").classList.remove("open"); };
+    $("pasteModal").onclick = function(e){ if (e.target === $("pasteModal")) $("pasteModal").classList.remove("open"); };
+    $("pasteParse").onclick = function(){ var t=$("pasteInput").value; if(!t.trim()){ toast("请先粘贴内容"); return; } renderPastePreview(parsePasted(t)); };
+    $("pasteConfirm").onclick = importPaste;
+    $("pastePreview").onchange = function(e){ if (e.target.classList.contains("pp-slot")){ var i=+e.target.getAttribute("data-i"); if (pasteItems[i]) pasteItems[i].slot = e.target.value; } };
 
     $("btnTheme").onclick = function(){
       var cur = document.documentElement.getAttribute("data-theme");
