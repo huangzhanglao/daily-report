@@ -430,6 +430,7 @@
   var TOKEN_KEY = "drb_token";
   var USER_KEY = "drb_user";
   var authMode = "login";
+  var pendingAuthAction = null; // 登录成功后需要自动续接的动作（如打开写笔记弹窗）
   var TOKEN = localStorage.getItem(TOKEN_KEY) || null;
   var USER = (function(){ try { return JSON.parse(localStorage.getItem(USER_KEY)||"null"); } catch(e){ return null; } })();
 
@@ -566,7 +567,7 @@
   /* ---------- 笔记（我的 / 公开） ---------- */
   function loadNotes(){
     if (MODE !== "server"){ $("noteList").innerHTML = '<div class="empty"><div class="big">🌐</div>笔记是共享功能，需连接服务端。请启动/连接本地服务或部署到你的云服务器。</div>'; return; }
-    if (noteState.filter === "mine" && !USER){ showAuth(); toast("请先登录查看我的笔记"); return; }
+    if (noteState.filter === "mine" && !USER){ pendingAuthAction = function(){ noteState.filter="mine"; document.querySelectorAll("#noteSeg button").forEach(function(x){ x.classList.toggle("active", x.getAttribute("data-nf")==="mine"); }); loadNotes(); }; showAuth(); toast("请先登录查看我的笔记"); return; }
     var scope = noteState.filter === "public" ? "public" : null;
     apiBlogList(scope).then(function(arr){
       noteState.list = arr || [];
@@ -624,7 +625,7 @@
   }
   function openNoteModal(id){
     if (MODE !== "server"){ toast("笔记需连接服务端"); return; }
-    if (!USER){ showAuth(); toast("请先登录后再写笔记"); return; }
+    if (!USER){ pendingAuthAction = function(){ openNoteModal(id); }; showAuth(); toast("请先登录后再写笔记"); return; }
     noteState.editingId = id || null;
     $("noteModalTitle").textContent = id ? "编辑笔记" : "写笔记";
     if (id){
@@ -1085,7 +1086,7 @@
 
   /* ---------- events ---------- */
   function bind(){
-    $("btnNew").onclick = function(){ if (MODE==="server" && !USER){ showAuth(); toast("写日报请先登录"); return; } openForm(); };
+    $("btnNew").onclick = function(){ if (MODE==="server" && !USER){ pendingAuthAction = function(){ openForm(); }; showAuth(); toast("写日报请先登录"); return; } openForm(); };
     $("btnAddPoint").onclick = function(){ addPointRow(""); var last=$("fPointsWrap").lastChild.querySelector(".pt-input"); if(last) last.focus(); };
     $("btnSave").onclick = saveForm;
     $("btnCancel").onclick = closeForm;
@@ -1156,7 +1157,9 @@
       if (p.length < 6){ $("authErr").textContent = "密码至少 6 位"; return; }
       var fn = (authMode === "login") ? doLogin : doRegister;
       fn(u, p).then(function(){
-      hideAuth(); setNet(); reload(); loadNotes(); goCenter();
+      hideAuth(); setNet(); reload(); loadNotes();
+      if (pendingAuthAction){ var a = pendingAuthAction; pendingAuthAction = null; a(); }
+      else goCenter();
       toast(authMode === "login" ? "欢迎回来" : "注册成功，开始记录吧");
       }).catch(function(e){ $("authErr").textContent = e.message || "操作失败"; });
     };
