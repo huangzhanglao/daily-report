@@ -15,3 +15,4 @@ venv/
 ._c.js
 _test_*.js
 _fb_test/
+src_cache/
