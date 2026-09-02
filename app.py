@@ -544,6 +544,30 @@ def blog_public(b) -> dict:
 app = FastAPI(title="日报工作台 API")
 
 
+# ---------- 安全响应头（缓解点击劫持 / XSS 外联注入 / MIME 嗅探） ----------
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")  # 禁止被 iframe 嵌入，防点击劫持
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("X-XSS-Protection", "1; mode=block")
+    # 阻断从第三方域加载脚本/样式（缓解外联 XSS 注入）；本站大量使用内联脚本，故保留 'unsafe-inline'
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "font-src 'self' data:; "
+        "connect-src 'self'"
+    )
+    response.headers.setdefault("Content-Security-Policy", csp)
+    # 仅当确实走 HTTPS（含反向代理转发的 x-forwarded-proto）才下发 HSTS，避免纯 HTTP 本地部署被误锁
+    if request.headers.get("x-forwarded-proto", "").lower() == "https" or request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
+
+
 @app.get("/api/health")
 def health():
     return {"ok": True, "time": int(time.time() * 1000)}

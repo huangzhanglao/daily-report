@@ -1,4 +1,5 @@
-fastapi>=0.110
-uvicorn>=0.27
-# 仅测试用（可选）：python -m pytest 或 fastapi.testclient 需要 httpx
-httpx>=0.27
+# 锁定版本以保证可复现并便于审计 CVE；升级时需同步验证兼容性
+fastapi==0.141.1
+uvicorn==0.52.4
+httpx==0.28.1
+starlette==1.6.0
