@@ -131,6 +131,31 @@ def init_db():
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT ''
             );
+            CREATE TABLE IF NOT EXISTS mortgage_regions (
+                id TEXT PRIMARY KEY,
+                key TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                lpr5 TEXT NOT NULL DEFAULT '3.50',
+                commercial_first TEXT NOT NULL DEFAULT '3.05',
+                commercial_second TEXT NOT NULL DEFAULT '3.35',
+                fund_first TEXT NOT NULL DEFAULT '2.60',
+                fund_second TEXT NOT NULL DEFAULT '3.075',
+                down_first TEXT NOT NULL DEFAULT '20',
+                down_second TEXT NOT NULL DEFAULT '30',
+                fund_cap_single TEXT NOT NULL DEFAULT '60',
+                fund_cap_double TEXT NOT NULL DEFAULT '120',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                sort INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS mortgage_scenarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                params TEXT NOT NULL DEFAULT '{}',
+                result TEXT NOT NULL DEFAULT '{}',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
             """
         )
         # 兼容旧库：补充 users 表可能缺失的列
@@ -236,6 +261,9 @@ DEFAULT_APPS = [
     {"key": "tax", "name": "报税工作台", "icon": "🧾",
      "desc": "多公司申报事项一屏掌握：按征期日历自动算截止日、完成率进度环、按公司 / 按税种总览、顺延申报。数据按账号隔离存档。",
      "entry": "tax.html", "color": "linear-gradient(135deg,#6366f1,#8b5cf6)", "sort": 4},
+    {"key": "mortgage", "name": "买房计算器", "icon": "🏠",
+     "desc": "结合最新房贷政策：按地区选预设利率 / 首付 / 公积金上限，算贷款总额、月供、总利息，并估算契税 / 增值税 / 个税 / 中介费等购房总成本。所有参数可调。",
+     "entry": "mortgage.html", "color": "linear-gradient(135deg,#ef4444,#f97316)", "sort": 5},
 ]
 
 DEFAULT_SETTINGS = {
@@ -253,6 +281,38 @@ DEFAULT_SETTINGS = {
         "4. 首页简介展示在应用中心顶部，管理员可在「设置 → 操作说明」中修改。"
     ),
 }
+
+# 买房计算器：地区预设政策（2026年最新，数据可后台调整，前端亦可手动覆盖）
+DEFAULT_REGIONS = [
+    # key, name, lpr5, 商贷首套, 商贷二套, 公积金首套, 公积金二套, 首付首套%, 首付二套%, 公积金上限单缴存(万), 双缴存(万), sort
+    ("beijing", "北京（一线）", "3.50", "3.05", "3.35", "2.60", "3.075", "20", "35", "120", "120", 1),
+    ("shanghai", "上海（一线）", "3.50", "3.05", "3.35", "2.60", "3.075", "20", "30", "65", "130", 2),
+    ("guangzhou", "广州（一线）", "3.50", "3.05", "3.35", "2.60", "3.075", "20", "30", "60", "100", 3),
+    ("shenzhen", "深圳（一线）", "3.50", "3.05", "3.05", "2.60", "3.075", "20", "30", "60", "110", 4),
+    ("hangzhou", "杭州（新一线）", "3.50", "3.05", "3.35", "2.60", "3.075", "20", "30", "65", "130", 5),
+    ("chengdu", "成都（新一线）", "3.50", "3.05", "3.35", "2.60", "3.075", "20", "30", "60", "90", 6),
+    ("wuhan", "武汉（新一线）", "3.50", "3.05", "3.35", "2.60", "3.075", "20", "30", "60", "80", 7),
+    ("xian", "西安（新一线）", "3.50", "3.05", "3.35", "2.60", "3.075", "20", "30", "65", "85", 8),
+    ("suzhou", "苏州（新一线）", "3.50", "3.05", "3.35", "2.60", "3.075", "20", "30", "80", "150", 9),
+    ("national", "全国通用（参考）", "3.50", "3.05", "3.35", "2.60", "3.075", "20", "30", "60", "100", 99),
+]
+
+
+def seed_mortgage_regions():
+    conn = get_conn()
+    try:
+        cnt = conn.execute("SELECT COUNT(*) AS c FROM mortgage_regions").fetchone()["c"]
+        if cnt > 0:
+            return
+        now = int(time.time() * 1000)
+        for r in DEFAULT_REGIONS:
+            conn.execute(
+                "INSERT INTO mortgage_regions (id,key,name,lpr5,commercial_first,commercial_second,fund_first,fund_second,down_first,down_second,fund_cap_single,fund_cap_double,enabled,sort) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1,?)",
+                (uid_now(), r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11]),
+            )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def grant_all_apps(uid: str):
@@ -289,15 +349,16 @@ def seed_app_catalog():
     conn = get_conn()
     try:
         now = int(time.time() * 1000)
-        cnt = conn.execute("SELECT COUNT(*) AS c FROM app_catalog").fetchone()["c"]
-        if cnt == 0:
-            for app in DEFAULT_APPS:
+        # 逐个 upsert 默认应用（即使目录已存在，也能补上新上架的应用，如买房计算器）
+        for app in DEFAULT_APPS:
+            exists = conn.execute("SELECT 1 FROM app_catalog WHERE key=?", (app["key"],)).fetchone()
+            if not exists:
                 conn.execute(
                     "INSERT INTO app_catalog (id,key,name,icon,desc,entry,color,sort,enabled,intro,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,1,'',?,?)",
                     (uid_now(), app["key"], app["name"], app["icon"], app["desc"],
                      app["entry"], app["color"], app["sort"], now, now),
                 )
-            conn.commit()
+        conn.commit()
         # 保证每位用户对每个已启用应用都有一条授权记录（默认授予，管理员可收回）
         apps = conn.execute("SELECT key FROM app_catalog WHERE enabled=1").fetchall()
         users = conn.execute("SELECT id FROM users").fetchall()
@@ -416,6 +477,7 @@ def uid_now() -> str:
 
 # 应用目录 / 权限 / 设置 种子（依赖 uid_now，故放在其定义之后）
 seed_app_catalog()
+seed_mortgage_regions()
 
 
 
@@ -840,6 +902,105 @@ def delete_tax(item_id: int, uid: str = Depends(require_uid)):
     return {"ok": True}
 
 
+# ---------------- 买房计算器 API ----------------
+@app.get("/api/mortgage/regions")
+def list_mortgage_regions(uid: str = Depends(require_uid)):
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT key,name,lpr5,commercial_first,commercial_second,fund_first,fund_second,down_first,down_second,fund_cap_single,fund_cap_double FROM mortgage_regions WHERE enabled=1 ORDER BY sort ASC"
+        ).fetchall()
+    finally:
+        conn.close()
+    return {"regions": [
+        {
+            "key": r["key"], "name": r["name"],
+            "lpr5": float(r["lpr5"]),
+            "commercial_first": float(r["commercial_first"]),
+            "commercial_second": float(r["commercial_second"]),
+            "fund_first": float(r["fund_first"]),
+            "fund_second": float(r["fund_second"]),
+            "down_first": float(r["down_first"]),
+            "down_second": float(r["down_second"]),
+            "fund_cap_single": float(r["fund_cap_single"]),
+            "fund_cap_double": float(r["fund_cap_double"]),
+        }
+        for r in rows
+    ]}
+
+
+@app.get("/api/mortgage/scenarios")
+def list_mortgage_scenarios(uid: str = Depends(require_uid)):
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id,name,params,result,created_at FROM mortgage_scenarios WHERE user_id=? ORDER BY updated_at DESC",
+            (uid,),
+        ).fetchall()
+    finally:
+        conn.close()
+    return {"scenarios": [
+        {"id": r["id"], "name": r["name"], "params": json.loads(r["params"] or "{}"),
+         "result": json.loads(r["result"] or "{}"), "created_at": r["created_at"]}
+        for r in rows
+    ]}
+
+
+@app.post("/api/mortgage/scenarios")
+async def create_mortgage_scenario(body: dict, uid: str = Depends(require_uid)):
+    b = body if isinstance(body, dict) else {}
+    name = (b.get("name") or "未命名方案").strip() or "未命名方案"
+    params = b.get("params") if isinstance(b.get("params"), dict) else {}
+    result = b.get("result") if isinstance(b.get("result"), dict) else {}
+    now = int(time.time() * 1000)
+    with write_lock:
+        conn = get_conn()
+        try:
+            cur = conn.execute(
+                "INSERT INTO mortgage_scenarios (user_id,name,params,result,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+                (uid, name, json.dumps(params, ensure_ascii=False), json.dumps(result, ensure_ascii=False), now, now),
+            )
+            sid = cur.lastrowid
+            conn.commit()
+        finally:
+            conn.close()
+    return {"id": sid, "name": name, "ok": True}
+
+
+@app.put("/api/mortgage/scenarios/{sid}")
+async def update_mortgage_scenario(sid: int, body: dict, uid: str = Depends(require_uid)):
+    b = body if isinstance(body, dict) else {}
+    with write_lock:
+        conn = get_conn()
+        try:
+            exists = conn.execute("SELECT id FROM mortgage_scenarios WHERE id=? AND user_id=?", (sid, uid)).fetchone()
+            if not exists:
+                return JSONResponse(status_code=404, content={"error": "方案不存在"})
+            conn.execute(
+                "UPDATE mortgage_scenarios SET name=?,params=?,result=?,updated_at=? WHERE id=? AND user_id=?",
+                ((b.get("name") or "").strip(), json.dumps(b.get("params") or {}, ensure_ascii=False),
+                 json.dumps(b.get("result") or {}, ensure_ascii=False), int(time.time() * 1000), sid, uid),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
+@app.delete("/api/mortgage/scenarios/{sid}")
+def delete_mortgage_scenario(sid: int, uid: str = Depends(require_uid)):
+    with write_lock:
+        conn = get_conn()
+        try:
+            cur = conn.execute("DELETE FROM mortgage_scenarios WHERE id=? AND user_id=?", (sid, uid))
+            conn.commit()
+            if cur.rowcount == 0:
+                return JSONResponse(status_code=404, content={"error": "方案不存在或无权删除"})
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
 # ---------------- 应用中心 / 设置 / 管理后台 API ----------------
 def app_row_to_dict(r):
     return {
@@ -1100,6 +1261,61 @@ async def admin_set_settings(body: dict, _: str = Depends(require_admin)):
                 if not isinstance(k, str):
                     continue
                 conn.execute("INSERT OR REPLACE INTO settings_meta (key, value) VALUES (?, ?)", (k, str(v)))
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
+@app.get("/api/admin/mortgage-regions")
+def admin_list_regions(_: str = Depends(require_admin)):
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT key,name,lpr5,commercial_first,commercial_second,fund_first,fund_second,down_first,down_second,fund_cap_single,fund_cap_double,enabled,sort FROM mortgage_regions ORDER BY sort ASC"
+        ).fetchall()
+    finally:
+        conn.close()
+    return {"regions": [
+        {
+            "key": r["key"], "name": r["name"],
+            "lpr5": float(r["lpr5"]),
+            "commercial_first": float(r["commercial_first"]),
+            "commercial_second": float(r["commercial_second"]),
+            "fund_first": float(r["fund_first"]),
+            "fund_second": float(r["fund_second"]),
+            "down_first": float(r["down_first"]),
+            "down_second": float(r["down_second"]),
+            "fund_cap_single": float(r["fund_cap_single"]),
+            "fund_cap_double": float(r["fund_cap_double"]),
+            "enabled": bool(r["enabled"]),
+            "sort": r["sort"],
+        }
+        for r in rows
+    ]}
+
+
+@app.put("/api/admin/mortgage-regions/{key}")
+async def admin_update_region(key: str, body: dict, _: str = Depends(require_admin)):
+    fields = {
+        "lpr5": "lpr5", "commercial_first": "commercial_first", "commercial_second": "commercial_second",
+        "fund_first": "fund_first", "fund_second": "fund_second", "down_first": "down_first",
+        "down_second": "down_second", "fund_cap_single": "fund_cap_single", "fund_cap_double": "fund_cap_double",
+        "enabled": "enabled", "sort": "sort",
+    }
+    sets, vals = [], []
+    for k, col in fields.items():
+        if k in body:
+            sets.append(f"{col}=?")
+            v = body[k]
+            vals.append(float(v) if k not in ("enabled", "sort") else (1 if v else 0) if k == "enabled" else int(v))
+    if not sets:
+        return {"ok": True}
+    vals.append(key)
+    with write_lock:
+        conn = get_conn()
+        try:
+            conn.execute(f"UPDATE mortgage_regions SET {','.join(sets)} WHERE key=?", vals)
             conn.commit()
         finally:
             conn.close()

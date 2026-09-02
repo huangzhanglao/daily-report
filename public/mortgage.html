@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>买房计算器</title>
+<style>
+  :root {
+    --bg:#f1f5f9; --panel:#fff; --ink:#0f172a; --ink-soft:#475569; --ink-faint:#94a3b8;
+    --line:#e2e8f0; --radius:14px; --shadow:0 1px 3px rgba(15,23,42,.06),0 6px 20px rgba(15,23,42,.05);
+    --brand:#ef4444; --brand2:#f97316; --ok:#16a34a; --warn:#d97706;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; }
+  .topbar { display:flex; align-items:center; gap:12px; padding:14px 24px; background:linear-gradient(135deg,#ef4444,#f97316);
+    color:#fff; position:sticky; top:0; z-index:50; }
+  .topbar h1 { font-size:18px; margin:0; font-weight:700; flex:1; }
+  .topbar .sub { font-size:12px; opacity:.9; font-weight:400; }
+  .btn { border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:10px;
+    padding:8px 14px; font-size:13px; cursor:pointer; transition:all .12s; font-weight:600; }
+  .btn:hover { border-color:#cbd5e1; }
+  .btn.primary { background:linear-gradient(135deg,#ef4444,#f97316); color:#fff; border:none; }
+  .btn.ghost { background:rgba(255,255,255,.18); color:#fff; border:1px solid rgba(255,255,255,.4); }
+  .btn.sm { padding:5px 10px; font-size:12px; }
+  .layout { display:grid; grid-template-columns: 1.15fr .85fr; gap:18px; padding:18px 24px 40px; max-width:1280px; margin:0 auto; }
+  @media (max-width: 920px){ .layout { grid-template-columns:1fr; } }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:18px 20px; margin-bottom:18px; }
+  .card h2 { font-size:15px; margin:0 0 14px; display:flex; align-items:center; gap:8px; }
+  .card h2 .tag { font-size:11px; font-weight:600; color:var(--brand); background:#fee2e2; padding:2px 8px; border-radius:999px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px 14px; }
+  .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px 14px; }
+  @media (max-width: 600px){ .grid2,.grid3 { grid-template-columns:1fr; } }
+  .field { display:flex; flex-direction:column; gap:5px; }
+  .field label { font-size:12px; color:var(--ink-soft); font-weight:600; }
+  .field .hint { font-size:11px; color:var(--ink-faint); }
+  input,select { width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:9px; font-size:14px;
+    background:#fff; color:var(--ink); outline:none; transition:border-color .12s; }
+  input:focus,select:focus { border-color:var(--brand); }
+  input[type=number] { -moz-appearance:textfield; }
+  .unit { position:relative; }
+  .unit::after { content:attr(data-u); position:absolute; right:11px; top:50%; transform:translateY(-50%); color:var(--ink-faint); font-size:12px; pointer-events:none; }
+  .seg { display:flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+  .seg button { flex:1; border:none; background:#fff; padding:9px 6px; font-size:13px; cursor:pointer; color:var(--ink-soft); font-weight:600; }
+  .seg button.on { background:linear-gradient(135deg,#ef4444,#f97316); color:#fff; }
+  .result-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  @media (max-width:600px){ .result-grid{grid-template-columns:1fr;} }
+  .stat { background:#f8fafc; border:1px solid var(--line); border-radius:11px; padding:12px 14px; }
+  .stat .k { font-size:12px; color:var(--ink-soft); margin-bottom:4px; }
+  .stat .v { font-size:19px; font-weight:800; letter-spacing:-.3px; }
+  .stat .v small { font-size:12px; font-weight:600; color:var(--ink-faint); margin-left:3px; }
+  .stat.hero { background:linear-gradient(135deg,#fff7ed,#fef2f2); border-color:#fecaca; }
+  .stat.hero .v { color:var(--brand); }
+  .breakdown { margin-top:6px; border-top:1px dashed var(--line); padding-top:10px; }
+  .brow { display:flex; justify-content:space-between; padding:5px 0; font-size:13px; }
+  .brow .bk { color:var(--ink-soft); }
+  .brow .bv { font-weight:700; }
+  .policy-note { font-size:12px; color:var(--ink-soft); background:#fef9c3; border:1px solid #fde68a; border-radius:9px; padding:9px 12px; margin-bottom:14px; line-height:1.5; }
+  .hidden { display:none !important; }
+  .scenario-panel { border:1px solid var(--line); border-radius:11px; padding:12px; margin-top:12px; background:#f8fafc; }
+  .scenario-row { display:flex; align-items:center; gap:8px; padding:8px 4px; border-bottom:1px solid var(--line); }
+  .scenario-row:last-child { border-bottom:none; }
+  .scenario-row .nm { flex:1; font-weight:600; }
+  .scenario-row .meta { font-size:11px; color:var(--ink-faint); }
+  .toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#0f172a; color:#fff;
+    padding:10px 18px; border-radius:10px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .2s; z-index:99; }
+  .toast.show { opacity:1; }
+  .overlay { position:fixed; inset:0; background:rgba(15,23,42,.55); display:none; align-items:center; justify-content:center; z-index:200; }
+  .overlay.show { display:flex; }
+  .modal { background:#fff; border-radius:16px; padding:22px; width:340px; max-width:92vw; box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  .modal h3 { margin:0 0 14px; font-size:16px; }
+  .modal .field { margin-bottom:12px; }
+  .modal .tabs { display:flex; gap:8px; margin-bottom:14px; }
+  .modal .tabs button { flex:1; padding:8px; border:1px solid var(--line); background:#fff; border-radius:9px; cursor:pointer; font-weight:600; color:var(--ink-soft); }
+  .modal .tabs button.active { background:linear-gradient(135deg,#ef4444,#f97316); color:#fff; border:none; }
+  .err { color:#dc2626; font-size:12px; min-height:16px; margin-bottom:6px; }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <h1>🏠 买房计算器 <span class="sub">房贷 + 税费 · 结合最新政策，参数全可调</span></h1>
+    <button class="btn ghost" id="btnScenario">📑 我的方案</button>
+    <button class="btn primary" id="btnSave">💾 保存方案</button>
+    <button class="btn ghost" id="btnHome">← 应用中心</button>
+  </div>
+
+  <div class="layout">
+    <!-- 左：输入区 -->
+    <div>
+      <div class="card">
+        <h2>① 房屋与地区 <span class="tag">政策预设</span></h2>
+        <div class="policy-note">
+          系统已按 <b>2026 年最新政策</b> 预置各城市利率 / 首付 / 公积金上限（5 年期 LPR=<b>3.5%</b>，首套商贷 <b>3.05%</b>，公积金首套 <b>2.6%</b>/二套 <b>3.075%</b>）。
+          选好地区后可直接微调——<b>每年利率与公积金政策会变，所有数字你都能自己改</b>。
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label>所在地区</label>
+            <select id="region"></select>
+            <span class="hint">不同城市利率 / 首付 / 公积金上限不同</span>
+          </div>
+          <div class="field">
+            <label>房屋性质</label>
+            <div class="seg" id="propertyType">
+              <button data-v="新房" class="on">新房</button>
+              <button data-v="二手房">二手房</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>购房套数</label>
+            <div class="seg" id="houseOrder">
+              <button data-v="首套" class="on">首套</button>
+              <button data-v="二套">二套</button>
+              <button data-v="三套及以上">三套+</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>公积金缴存类型</label>
+            <div class="seg" id="fundDeposit">
+              <button data-v="单缴存">单缴存</button>
+              <button data-v="双缴存" class="on">双缴存</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>房屋总价</label>
+            <div class="unit" data-u="万元"><input id="price" type="number" min="0" step="1" value="500" /></div>
+          </div>
+          <div class="field">
+            <label>建筑面积</label>
+            <div class="unit" data-u="㎡"><input id="area" type="number" min="0" step="1" value="89" /></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>② 贷款测算 <span class="tag">可调</span></h2>
+        <div class="grid2">
+          <div class="field">
+            <label>贷款方式</label>
+            <div class="seg" id="loanType">
+              <button data-v="商业贷款" class="on">商业贷款</button>
+              <button data-v="公积金贷款">公积金</button>
+              <button data-v="组合贷款">组合贷</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>还款方式</label>
+            <div class="seg" id="repayMethod">
+              <button data-v="等额本息" class="on">等额本息</button>
+              <button data-v="等额本金">等额本金</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>首付比例 <span id="downHint" class="hint"></span></label>
+            <div class="unit" data-u="%"><input id="downPct" type="number" min="0" max="100" step="1" value="20" /></div>
+          </div>
+          <div class="field">
+            <label>贷款年限</label>
+            <div class="unit" data-u="年"><input id="termYears" type="number" min="1" max="30" step="1" value="30" /></div>
+          </div>
+          <div class="field">
+            <label>商业贷款利率 <span class="hint">LPR+加点</span></label>
+            <div class="unit" data-u="%"><input id="commRate" type="number" min="0" step="0.01" value="3.05" /></div>
+          </div>
+          <div class="field">
+            <label>公积金贷款利率</label>
+            <div class="unit" data-u="%"><input id="fundRate" type="number" min="0" step="0.01" value="2.60" /></div>
+          </div>
+          <div class="field">
+            <label>公积金贷款上限</label>
+            <div class="unit" data-u="万元"><input id="fundCap" type="number" min="0" step="1" value="120" /></div>
+            <span class="hint">随地区 / 缴存类型自动带出，可改</span>
+          </div>
+          <div class="field">
+            <label>LPR 参考（5 年期）</label>
+            <div class="unit" data-u="%"><input id="lpr5" type="number" min="0" step="0.01" value="3.50" /></div>
+          </div>
+        </div>
+        <div id="comboNote" class="policy-note hidden" style="margin-top:12px"></div>
+      </div>
+
+      <div class="card">
+        <h2>③ 购房总成本（税费 / 中介费） <span class="tag">可调</span></h2>
+        <div class="policy-note">
+          契税、增值税、个税、中介费比例均可直接修改。政策默认值：契税首套≤140㎡ <b>1%</b>、>140㎡ <b>1.5%</b>，二套≤140㎡ <b>1%</b>、>140㎡ <b>2%</b>，三套 <b>3%</b>；
+          增值税（不满 2 年）<b>3%</b>；个税核定 <b>1%</b>；中介费 <b>2%</b>。
+        </div>
+        <div class="grid3">
+          <div class="field">
+            <label>契税税率</label>
+            <div class="unit" data-u="%"><input id="deedRate" type="number" min="0" step="0.01" value="1" /></div>
+          </div>
+          <div class="field" id="holdField">
+            <label>二手房持有年限</label>
+            <div class="seg" id="holdYears">
+              <button data-v="不满2年" class="on">不满2年</button>
+              <button data-v="2-5年">2-5年</button>
+              <button data-v="满五唯一">满五唯一</button>
+            </div>
+          </div>
+          <div class="field" id="vatField">
+            <label>增值税及附加率</label>
+            <div class="unit" data-u="%"><input id="vatRate" type="number" min="0" step="0.01" value="3" /></div>
+            <span class="hint" id="vatHint">满 2 年免征</span>
+          </div>
+          <div class="field" id="persField">
+            <label>个人所得税率</label>
+            <div class="unit" data-u="%"><input id="personalRate" type="number" min="0" step="0.01" value="1" /></div>
+            <span class="hint" id="persHint">满五唯一免征</span>
+          </div>
+          <div class="field">
+            <label>中介费率</label>
+            <div class="unit" data-u="%"><input id="agentRate" type="number" min="0" step="0.1" value="2" /></div>
+          </div>
+          <div class="field" id="repairField">
+            <label>维修基金</label>
+            <div class="unit" data-u="元/㎡"><input id="repairUnit" type="number" min="0" step="1" value="120" /></div>
+            <span class="hint">仅新房（二手房多为 0）</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 右：结果区 -->
+    <div>
+      <div class="card">
+        <h2>💡 测算结果</h2>
+        <div class="result-grid">
+          <div class="stat hero"><div class="k">月供（等额本息）</div><div class="v" id="rMonthly">—</div></div>
+          <div class="stat hero"><div class="k">贷款总额</div><div class="v" id="rLoan">—</div></div>
+          <div class="stat"><div class="k">首付金额</div><div class="v" id="rDown">—</div></div>
+          <div class="stat"><div class="k">还款总利息</div><div class="v" id="rInterest">—</div></div>
+          <div class="stat"><div class="k">还款总额（本+息）</div><div class="v" id="rTotalPay">—</div></div>
+          <div class="stat"><div class="k">还款月数</div><div class="v" id="rMonths">—</div></div>
+        </div>
+        <div class="breakdown" id="loanBreakdown"></div>
+        <div id="equalPrincipalNote" class="policy-note hidden" style="margin-top:10px"></div>
+      </div>
+
+      <div class="card">
+        <h2>💰 购房总成本</h2>
+        <div class="stat hero" style="margin-bottom:12px"><div class="k">购房总成本（总价 + 全部税费 / 费用）</div><div class="v" id="rTotalCost">—</div></div>
+        <div class="breakdown" id="costBreakdown"></div>
+        <div class="stat" style="margin-top:12px;background:#fef2f2;border-color:#fecaca">
+          <div class="k">需自筹现金（首付 + 税费 + 中介 + 维修，不含贷款）</div>
+          <div class="v" id="rCash" style="color:var(--brand)">—</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>📌 当前参数速览</h2>
+        <div class="breakdown" id="paramsView"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 方案列表 -->
+  <div class="overlay" id="scenarioOverlay">
+    <div class="modal" style="width:460px">
+      <h3>我的测算方案</h3>
+      <div id="scenarioList" style="max-height:50vh;overflow:auto"></div>
+      <div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end">
+        <button class="btn" id="scenarioClose">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 鉴权遮罩（直接打开本页时若无登录态则自动弹出） -->
+  <div class="overlay" id="authOverlay">
+    <div class="modal">
+      <h3 id="authTitle">登录 · 买房计算器</h3>
+      <div class="tabs">
+        <button id="authTabLogin" class="active">登录</button>
+        <button id="authTabReg">注册</button>
+      </div>
+      <div class="field"><label>用户名</label><input id="authUser" placeholder="3-20 位，与工作台同一账号" /></div>
+      <div class="field"><label>密码</label><input id="authPass" type="password" placeholder="至少 6 位" /></div>
+      <div class="err" id="authErr"></div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn primary" id="authSubmit" style="flex:1">登录</button>
+        <button class="btn" id="authCancel">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  /* ---------- 账号 / 鉴权（与工作台风同一登录态，数据按用户隔离） ---------- */
+  function getToken(){ try { return localStorage.getItem('drb_token') || ''; } catch(e){ return ''; } }
+  function setSession(tk,u){ try { localStorage.setItem('drb_token', tk); localStorage.setItem('drb_user', JSON.stringify(u)); } catch(e){} }
+  async function apiGet(path){ const r = await fetch(path, {headers:{'Authorization':'Bearer '+getToken()}}); if (r.status===401) throw new Error('unauth'); return r.json(); }
+  async function apiPost(path, body){ const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken()}, body: JSON.stringify(body)}); if (r.status===401) throw new Error('unauth'); return r.json(); }
+  async function apiPut(path, body){ const r = await fetch(path, {method:'PUT', headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken()}, body: JSON.stringify(body)}); if (r.status===401) throw new Error('unauth'); return r.json(); }
+  async function apiDelete(path){ const r = await fetch(path, {headers:{'Authorization':'Bearer '+getToken()}}); return r.json(); }
+
+  let _authDone=null, _authMode='login';
+  function ensureAuth(){
+    if (getToken()){ return apiGet('/api/auth/me').catch(function(){ return new Promise(function(res){ openAuth(res); }); }); }
+    return new Promise(function(res){ openAuth(res); });
+  }
+  function openAuth(done){ _authDone=done; setAuthMode('login'); document.getElementById('authOverlay').classList.add('show'); const u=document.getElementById('authUser'); if(u)u.focus(); }
+  function setAuthMode(m){ _authMode=m;
+    document.getElementById('authTabLogin').classList.toggle('active', m==='login');
+    document.getElementById('authTabReg').classList.toggle('active', m==='register');
+    document.getElementById('authSubmit').textContent = (m==='login'?'登录':'注册并进入');
+    document.getElementById('authTitle').textContent = (m==='login'?'登录':'注册')+' · 买房计算器';
+  }
+  async function submitAuth(){
+    const u=(document.getElementById('authUser').value||'').trim();
+    const p=document.getElementById('authPass').value||'';
+    const err=document.getElementById('authErr'); err.textContent='';
+    if(!u||!p){ err.textContent='请填写用户名和密码'; return; }
+    try{
+      const r=await fetch('/api/auth/'+_authMode,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})});
+      const data=await r.json();
+      if(!r.ok){ err.textContent=(data&&data.detail)?data.detail:'操作失败'; return; }
+      setSession(data.token, data.user);
+      document.getElementById('authOverlay').classList.remove('show');
+      const d=_authDone; _authDone=null; if(d)d();
+    }catch(e){ err.textContent='网络错误，请重试'; }
+  }
+  document.getElementById('authTabLogin').onclick=function(){setAuthMode('login');};
+  document.getElementById('authTabReg').onclick=function(){setAuthMode('register');};
+  document.getElementById('authSubmit').onclick=submitAuth;
+  document.getElementById('authPass').addEventListener('keydown',function(e){ if(e.key==='Enter') submitAuth(); });
+  document.getElementById('authCancel').onclick=function(){ document.getElementById('authOverlay').classList.remove('show'); const d=_authDone; _authDone=null; if(d)d(); };
+  document.getElementById('btnHome').onclick=function(){ location.href='index.html'; };
+
+  /* ---------- 工具 ---------- */
+  const $ = id => document.getElementById(id);
+  const num = (id, d=0) => { const v = parseFloat($(id).value); return isNaN(v) ? d : v; };
+  function fmt(n){ if(!isFinite(n)) return '—'; const neg=n<0; n=Math.abs(n); let s; if(n>=10000){ s=(n/10000).toLocaleString('zh-CN',{maximumFractionDigits:2}); } else { s=n.toLocaleString('zh-CN',{maximumFractionDigits:2}); } return (neg?'-':'')+s; }
+  function yuan(n){ return '¥'+fmt(n)+'万'; }
+  function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); }
+
+  /* ---------- 状态 ---------- */
+  let REGIONS = [];
+  let currentRegion = null;
+
+  /* ---------- 段选择器绑定 ---------- */
+  function bindSeg(id, cb){
+    const box=$(id);
+    box.querySelectorAll('button').forEach(function(b){
+      b.onclick=function(){
+        box.querySelectorAll('button').forEach(x=>x.classList.remove('on'));
+        b.classList.add('on');
+        if(cb) cb(b.getAttribute('data-v'));
+      };
+    });
+  }
+  function segVal(id){ const b=$(id).querySelector('button.on'); return b?b.getAttribute('data-v'):''; }
+
+  bindSeg('propertyType', function(){ syncTaxFields(); calc(); });
+  bindSeg('houseOrder', function(){ applyHouseOrderDefaults(); calc(); });
+  bindSeg('fundDeposit', function(){ applyFundCap(); calc(); });
+  bindSeg('loanType', function(){ calc(); });
+  bindSeg('repayMethod', function(){ calc(); });
+  bindSeg('holdYears', function(){ syncTaxFields(); calc(); });
+
+  /* 所有输入框实时重算 */
+  ['price','area','downPct','termYears','commRate','fundRate','fundCap','lpr5','deedRate','vatRate','personalRate','agentRate','repairUnit']
+    .forEach(function(id){ $(id).addEventListener('input', calc); });
+
+  /* ---------- 地区预设 ---------- */
+  function applyRegion(region){
+    currentRegion = region;
+    const order = segVal('houseOrder');
+    $('lpr5').value = region.lpr5;
+    $('commRate').value = (order==='二套'? region.commercial_second : region.commercial_first);
+    $('fundRate').value = (order==='二套'? region.fund_second : region.fund_first);
+    applyHouseOrderDefaults();   // 首付
+    applyFundCap();              // 公积金上限
+  }
+  function applyHouseOrderDefaults(){
+    if(!currentRegion) return;
+    const order = segVal('houseOrder');
+    const dp = order==='首套'? currentRegion.down_first : currentRegion.down_second;
+    $('downPct').value = dp;
+  }
+  function applyFundCap(){
+    if(!currentRegion) return;
+    const dep = segVal('fundDeposit');
+    $('fundCap').value = dep==='单缴存'? currentRegion.fund_cap_single : currentRegion.fund_cap_double;
+  }
+  function applyDeedDefault(){
+    // 仅当用户没手动改过时自动带出（简化：始终按套数+面积给推荐值，用户可再改）
+    const order=segVal('houseOrder'), area=num('area',0);
+    let r;
+    if(order==='首套') r = area>140? 1.5 : 1;
+    else if(order==='二套') r = area>140? 2 : 1;
+    else r = 3;
+    $('deedRate').value = r;
+  }
+  function syncTaxFields(){
+    const prop=segVal('propertyType');
+    const isSecond = prop==='二手房';
+    $('holdField').classList.toggle('hidden', !isSecond);
+    $('vatField').classList.toggle('hidden', !isSecond);
+    $('persField').classList.toggle('hidden', !isSecond);
+    $('repairField').classList.toggle('hidden', isSecond);
+    if(isSecond){
+      const hy=segVal('holdYears');
+      if(hy==='不满2年'){ $('vatRate').value=3; $('vatHint').textContent='不满2年征收'; }
+      else { $('vatRate').value=0; $('vatHint').textContent='满2年免征'; }
+      if(hy==='满五唯一'){ $('personalRate').value=0; $('persHint').textContent='满五唯一免征'; }
+      else { $('personalRate').value=1; $('persHint').textContent='核定征收'; }
+    } else {
+      $('vatRate').value=0; $('personalRate').value=0; $('repairUnit').value=120;
+    }
+  }
+
+  /* ---------- 计算核心 ---------- */
+  function calcMonthlyEqual(principal, annualPct, months){
+    const r = annualPct/100/12;
+    if(r===0) return principal/months;
+    const f = Math.pow(1+r, months);
+    return principal * r * f / (f-1);
+  }
+  function calcEqualPrincipal(principal, annualPct, months){
+    const r = annualPct/100/12;
+    const base = principal/months;
+    return { first: base + principal*r, decrease: base*r, interest: principal*r*(months+1)/2 };
+  }
+
+  function calc(){
+    // ---- 贷款部分 ----
+    const price = num('price',0) * 10000;   // 转元
+    const downPct = num('downPct',0)/100;
+    const downPay = price * downPct;
+    const loanTotal = Math.max(0, price - downPay);
+    const months = Math.round(num('termYears',30) * 12);
+    const loanType = segVal('loanType');
+    const repay = segVal('repayMethod');
+    const commRate = num('commRate',0);
+    const fundRate = num('fundRate',0);
+    const fundCap = num('fundCap',0) * 10000;
+    const area = num('area',0);
+
+    let commLoan=0, fundLoan=0, note='';
+    if(loanType==='商业贷款'){
+      commLoan = loanTotal; fundLoan = 0;
+    } else if(loanType==='公积金贷款'){
+      fundLoan = Math.min(fundCap, loanTotal); commLoan = loanTotal - fundLoan;
+      if(loanTotal > fundCap) note = '公积金额度不足（上限 '+fmt(fundCap/10000)+' 万），超出部分 '+yuan(commLoan)+' 需以商业贷款补足（已自动并入商贷）。';
+    } else { // 组合贷
+      fundLoan = Math.min(fundCap, loanTotal); commLoan = loanTotal - fundLoan;
+    }
+
+    let monthly=0, totalInterest=0, monthlyFirst=null, monthlyDecrease=null;
+    if(repay==='等额本息'){
+      monthly = calcMonthlyEqual(commLoan, commRate, months) + calcMonthlyEqual(fundLoan, fundRate, months);
+      totalInterest = (commLoan>0? (calcMonthlyEqual(commLoan,commRate,months)*months - commLoan):0)
+                    + (fundLoan>0? (calcMonthlyEqual(fundLoan,fundRate,months)*months - fundLoan):0);
+    } else {
+      const c = commLoan>0? calcEqualPrincipal(commLoan, commRate, months):{first:0,decrease:0,interest:0};
+      const f = fundLoan>0? calcEqualPrincipal(fundLoan, fundRate, months):{first:0,decrease:0,interest:0};
+      monthlyFirst = c.first + f.first;
+      monthlyDecrease = c.decrease + f.decrease;
+      totalInterest = c.interest + f.interest;
+      monthly = monthlyFirst;
+    }
+    const totalPay = loanTotal + totalInterest;
+
+    // ---- 税费部分 ----
+    const prop=segVal('propertyType');
+    const isSecond = prop==='二手房';
+    const deedRate = num('deedRate',0)/100;
+    const vatRate = isSecond? num('vatRate',0)/100 : 0;
+    const personalRate = isSecond? num('personalRate',0)/100 : 0;
+    const agentRate = num('agentRate',0)/100;
+    const repairUnit = isSecond? 0 : num('repairUnit',0);
+
+    const deedTax = price * deedRate;
+    const vat = price * vatRate;
+    const personal = price * personalRate;
+    const agent = price * agentRate;
+    const repair = area * repairUnit;
+    const costItems = [
+      {k:'房屋总价', v:price},
+      {k:'契税', v:deedTax},
+      {k:isSecond?'增值税及附加':'（新房无增值税）', v:vat},
+      {k:isSecond?'个人所得税':'（新房无个税）', v:personal},
+      {k:'中介费', v:agent},
+      {k:isSecond?'（二手房无维修基金）':'维修基金', v:repair},
+    ];
+    const taxTotal = deedTax + vat + personal + agent + repair;
+    const totalCost = price + taxTotal;
+    const cashNeeded = downPay + taxTotal; // 首付 + 全部税费/费用（贷款不算现金）
+
+    // ---- 渲染 ----
+    $('rMonthly').innerHTML = repay==='等额本息' ? yuan(monthly).replace('¥','¥') : yuan(monthlyFirst||monthly);
+    $('rLoan').textContent = yuan(loanTotal);
+    $('rDown').textContent = yuan(downPay);
+    $('rInterest').textContent = yuan(totalInterest);
+    $('rTotalPay').textContent = yuan(totalPay);
+    $('rMonths').textContent = months + ' 期';
+
+    // 贷款拆分明细
+    let lb = '';
+    lb += row('商业贷款', yuan(commLoan));
+    lb += row('公积金贷款', yuan(fundLoan));
+    if(loanType==='组合贷' || loanType==='公积金贷款')
+      lb += row('其中公积金上限', yuan(fundCap));
+    $('loanBreakdown').innerHTML = lb;
+
+    const ep = $('equalPrincipalNote');
+    if(repay==='等额本金'){
+      ep.classList.remove('hidden');
+      ep.innerHTML = '等额本金：首月月供 <b>'+yuan(monthlyFirst)+'</b>，之后每月递减 <b>'+fmt(monthlyDecrease)+' 元</b>，末月约 <b>'+fmt(monthlyFirst-monthDecrease*(months-1))+' 元</b>。';
+    } else { ep.classList.add('hidden'); }
+
+    const cn = $('comboNote');
+    if(note){ cn.classList.remove('hidden'); cn.textContent = '⚠️ '+note; } else { cn.classList.add('hidden'); }
+
+    // 成本明细
+    let cb = '';
+    costItems.forEach(function(it){ cb += row(it.k, yuan(it.v)); });
+    cb += row('税费 / 费用合计', yuan(taxTotal), true);
+    $('costBreakdown').innerHTML = cb;
+    $('rTotalCost').textContent = yuan(totalCost);
+    $('rCash').textContent = yuan(cashNeeded);
+
+    // 参数速览
+    $('paramsView').innerHTML =
+      row('地区 / 套数', (currentRegion?currentRegion.name:'—')+' · '+segVal('houseOrder')) +
+      row('房屋性质 / 面积', prop+' · '+fmt(area)+' ㎡') +
+      row('贷款方式 / 年限', loanType+' · '+num('termYears',30)+' 年') +
+      row('商贷 / 公积金利率', commRate+'% / '+fundRate+'%') +
+      row('首付比例', num('downPct',0)+'%') +
+      row('契税 / 中介费率', num('deedRate',0)+'% / '+num('agentRate',0)+'%');
+
+    // 缓存当前结果供保存
+    state.result = {
+      monthly: repay==='等额本息'? monthly : monthlyFirst,
+      loanTotal, downPay, totalInterest, totalPay, months,
+      commLoan, fundLoan, totalCost, cashNeeded, taxTotal
+    };
+  }
+  function row(k,v,strong){ return '<div class="brow"><span class="bk">'+k+'</span><span class="bv"'+((strong)?' style="color:var(--brand)"':'')+'>'+v+'</span></div>'; }
+
+  /* ---------- 方案存取（按用户隔离） ---------- */
+  const state = { result:null };
+  function collectParams(){
+    return {
+      region: currentRegion? currentRegion.key : '',
+      price: $('price').value, area: $('area').value,
+      propertyType: segVal('propertyType'), houseOrder: segVal('houseOrder'),
+      fundDeposit: segVal('fundDeposit'), loanType: segVal('loanType'),
+      repayMethod: segVal('repayMethod'), downPct: $('downPct').value,
+      termYears: $('termYears').value, commRate: $('commRate').value,
+      fundRate: $('fundRate').value, fundCap: $('fundCap').value,
+      lpr5: $('lpr5').value, deedRate: $('deedRate').value,
+      holdYears: segVal('holdYears'), vatRate: $('vatRate').value,
+      personalRate: $('personalRate').value, agentRate: $('agentRate').value,
+      repairUnit: $('repairUnit').value
+    };
+  }
+  function applyParams(p){
+    if(!p) return;
+    if(p.region){ const sel=document.createElement('option'); /* noop */ }
+    if(typeof p.region==='string'){ const o=Array.from($('region').options).find(x=>x.value===p.region); if(o) o.selected=true; if(REGIONS.length){ const r=REGIONS.find(x=>x.key===p.region); if(r) currentRegion=r; } }
+    const set=(id,v)=>{ if(v!==undefined&&v!==null) $(id).value=v; };
+    set('price',p.price); set('area',p.area);
+    setSeg('propertyType',p.propertyType); setSeg('houseOrder',p.houseOrder);
+    setSeg('fundDeposit',p.fundDeposit); setSeg('loanType',p.loanType);
+    setSeg('repayMethod',p.repayMethod);
+    set('downPct',p.downPct); set('termYears',p.termYears);
+    set('commRate',p.commRate); set('fundRate',p.fundRate); set('fundCap',p.fundCap);
+    set('lpr5',p.lpr5); set('deedRate',p.deedRate); setSeg('holdYears',p.holdYears);
+    set('vatRate',p.vatRate); set('personalRate',p.personalRate);
+    set('agentRate',p.agentRate); set('repairUnit',p.repairUnit);
+    if(currentRegion) applyFundCap();
+    syncTaxFields(); calc();
+  }
+  function setSeg(id,v){ if(!v) return; const b=Array.from($(id).querySelectorAll('button')).find(x=>x.getAttribute('data-v')===v); if(b) b.click(); }
+
+  async function loadScenarios(){
+    try { const d = await apiGet('/api/mortgage/scenarios'); return d.scenarios||[]; }
+    catch(e){ return []; }
+  }
+  async function renderScenarios(){
+    const list = await loadScenarios();
+    const box = $('scenarioList');
+    if(!list.length){ box.innerHTML = '<div style="color:var(--ink-faint);padding:16px;text-align:center">还没有保存的方案。填好参数后点「保存方案」即可。</div>'; return; }
+    box.innerHTML = '';
+    list.forEach(function(s){
+      const div=document.createElement('div'); div.className='scenario-row';
+      const r=s.result||{};
+      const meta = '月供 '+yuan(r.monthly||0)+' · 总成本 '+yuan(r.totalCost||0);
+      div.innerHTML = '<div><div class="nm">'+escapeHtml(s.name)+'</div><div class="meta">'+meta+'</div></div>';
+      const load=document.createElement('button'); load.className='btn sm primary'; load.textContent='载入';
+      load.onclick=function(){ applyParams(s.params); $('scenarioOverlay').classList.remove('show'); toast('已载入方案：'+s.name); };
+      const del=document.createElement('button'); del.className='btn sm'; del.textContent='删除';
+      del.onclick=async function(){ if(!confirm('确定删除方案「'+s.name+'」？')) return; await apiDelete('/api/mortgage/scenarios/'+s.id); renderScenarios(); toast('已删除'); };
+      div.appendChild(load); div.appendChild(del);
+      box.appendChild(div);
+    });
+  }
+  function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+  $('btnSave').onclick = async function(){
+    const name = prompt('给这个测算方案起个名字：', '方案 '+new Date().toLocaleDateString('zh-CN'));
+    if(!name) return;
+    try{
+      await apiPost('/api/mortgage/scenarios', { name: name.trim(), params: collectParams(), result: state.result||{} });
+      toast('已保存方案：'+name.trim());
+    }catch(e){ toast('保存失败，请先登录'); }
+  };
+  $('btnScenario').onclick = async function(){
+    $('scenarioOverlay').classList.add('show');
+    await renderScenarios();
+  };
+  $('scenarioClose').onclick = function(){ $('scenarioOverlay').classList.remove('show'); };
+
+  /* ---------- 启动 ---------- */
+  async function start(){
+    try{
+      const d = await apiGet('/api/mortgage/regions');
+      REGIONS = d.regions||[];
+      const sel=$('region');
+      REGIONS.forEach(function(r){
+        const o=document.createElement('option'); o.value=r.key; o.textContent=r.name; sel.appendChild(o);
+      });
+      if(REGIONS.length){ sel.value = REGIONS[0].key; applyRegion(REGIONS[0]); }
+      sel.onchange = function(){ const r=REGIONS.find(x=>x.key===sel.value); if(r) applyRegion(r); calc(); };
+    }catch(e){ /* 鉴权失败由 ensureAuth 处理 */ }
+    applyDeedDefault();
+    syncTaxFields();
+    calc();
+  }
+
+  ensureAuth().then(start).catch(function(){ /* 取消登录也允许浏览（计算仍可用，保存需登录） */ start(); });
+</script>
+</body>
+</html>
