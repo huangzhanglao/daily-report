@@ -185,14 +185,14 @@
 <script>
 (function(){
   "use strict";
-  var TOKEN_KEY = "drb_token", USER_KEY = "drb_user";
-  var TOKEN = localStorage.getItem(TOKEN_KEY) || null;
+  var USER_KEY = "drb_user";
   var USER = (function(){ try { return JSON.parse(localStorage.getItem(USER_KEY)||"null"); } catch(e){ return null; } })();
   var editingAppKey = null, editingUserId = null;
 
   function $(id){ return document.getElementById(id); }
   function esc(s){ return (s==null?"":String(s)).replace(/[&<>\"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
-  function authHeader(){ return TOKEN ? {"Authorization":"Bearer "+TOKEN} : {}; }
+  // token 已改为 HttpOnly cookie，由浏览器自动携带，前端不再注入 Bearer
+  function authHeader(){ return {}; }
   function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove("show"); }, 2200); }
 
   function api(method, path, body){
@@ -201,15 +201,14 @@
     return fetch(path, opts).then(function(r){ return r.json().then(function(d){ return {status:r.status, data:d}; }).catch(function(){ return {status:r.status, data:{}}; }); });
   }
 
-  function logout(){ TOKEN=null; USER=null; localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); location.href="index.html"; }
+  function logout(){ USER=null; localStorage.removeItem(USER_KEY); fetch("/api/auth/logout",{method:"POST"}).finally(function(){ location.href="index.html"; }); }
 
   function showGate(msg){ $("gate").style.display=""; $("gate").textContent = msg; ["tab-apps","tab-perms","tab-users","tab-guide"].forEach(function(id){ $(id).style.display="none"; }); }
 
-  /* ---------- 初始化：校验管理员权限 ---------- */
+  /* ---------- 初始化：校验管理员权限（token 由 HttpOnly cookie 携带，直接请求 /api/auth/me） ---------- */
   function init(){
-    if (!TOKEN){ showGate("未登录，请先到应用中心登录后再访问管理中心。"); return; }
     api("GET","/api/auth/me").then(function(res){
-      if (res.status !== 200 || !res.data.user || res.data.user.role !== "admin"){ showGate("无权限：管理中心仅对管理员开放。"); return; }
+      if (res.status !== 200 || !res.data.user || res.data.user.role !== "admin"){ showGate("未登录或无权限：管理中心仅对管理员开放，请先在应用中心登录。"); return; }
       USER = res.data.user; localStorage.setItem(USER_KEY, JSON.stringify(USER));
       $("who").textContent = "当前：" + (USER.displayName || USER.username) + "（管理员）";
       loadApps(); loadPerms(); loadUsers(); loadGuide();

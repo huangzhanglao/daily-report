@@ -555,16 +555,15 @@
   var db = makeBackendDb();
 
   /* ===== 后端数据层与登录鉴权（自建 SQLite + 按用户隔离，复用工作台登录态 drb_token） ===== */
-  function getToken() { try { return window.localStorage.getItem('drb_token') || ''; } catch (e) { return ''; } }
+  // token 已改为 HttpOnly cookie，浏览器自动携带，前端不再读写 token
   function getMe() { try { return JSON.parse(window.localStorage.getItem('drb_user') || 'null'); } catch (e) { return null; } }
-  function setAuth(token, user) { try { window.localStorage.setItem('drb_token', token); window.localStorage.setItem('drb_user', JSON.stringify(user)); } catch (e) {} }
+  function setAuth(user) { try { window.localStorage.setItem('drb_user', JSON.stringify(user)); } catch (e) {} }
   function api(path, method, body) {
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
       xhr.open(method || 'GET', path, true);
       xhr.setRequestHeader('Content-Type', 'application/json');
-      var tk = getToken();
-      if (tk) xhr.setRequestHeader('Authorization', 'Bearer ' + tk);
+      // token 由 HttpOnly cookie 自动携带，不再手动注入 Bearer
       xhr.onload = function () {
         var data; try { data = JSON.parse(xhr.responseText); } catch (e) { data = {}; }
         if (xhr.status >= 200 && xhr.status < 300) resolve(data);
@@ -626,8 +625,8 @@
     msg.textContent = ''; msg.className = 'auth-msg';
     if (!u || !p) { msg.textContent = '请输入账号和密码'; msg.className = 'auth-msg err'; return; }
     api('/api/auth/' + mode, 'POST', { username: u, password: p }).then(function (r) {
-      if (!r || !r.token) { msg.textContent = '操作失败，请重试'; msg.className = 'auth-msg err'; return; }
-      setAuth(r.token, r.user || { username: u });
+      if (!r || !r.user) { msg.textContent = '操作失败，请重试'; msg.className = 'auth-msg err'; return; }
+      setAuth(r.user || { username: u });
       hideAuth();
       if (typeof document.getElementById('authOverlay')._onOk === 'function') document.getElementById('authOverlay')._onOk();
     }).catch(function (e) {
@@ -635,8 +634,10 @@
     });
   }
   function ensureAuth(cb) {
-    if (getToken()) { cb(); return; }
-    showAuth(cb);
+    api('/api/auth/me', 'GET').then(function (r) {
+      if (r && r.user) { setAuth(r.user); cb(); }
+      else { showAuth(cb); }
+    }).catch(function () { showAuth(cb); });
   }
 
 

@@ -1185,16 +1185,16 @@
   const notified={}; // id -> 'YYYY-M-D' 已提醒日期，避免重复
 
   /* ---------- 持久化（后端 API · 按用户隔离） ---------- */
-  function getToken(){ try { return localStorage.getItem('drb_token') || ''; } catch(e){ return ''; } }
+  // token 已改为 HttpOnly cookie，浏览器自动携带，前端不再读写 token
   function getUser(){ try { return JSON.parse(localStorage.getItem('drb_user') || 'null'); } catch(e){ return null; } }
-  function setSession(tk,u){ try { localStorage.setItem('drb_token', tk); localStorage.setItem('drb_user', JSON.stringify(u)); } catch(e){} }
+  function setSession(u){ try { localStorage.setItem('drb_user', JSON.stringify(u)); } catch(e){} }
   async function apiGet(path){
-    const r = await fetch(path, {headers:{'Authorization':'Bearer '+getToken()}});
+    const r = await fetch(path);
     if (r.status === 401) throw new Error('unauth');
     return r.json();
   }
   async function apiPut(path, body){
-    const r = await fetch(path, {method:'PUT', headers:{'Content-Type':'application/json','Authorization':'Bearer '+getToken()}, body: JSON.stringify(body)});
+    const r = await fetch(path, {method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
     if (r.status === 401) throw new Error('unauth');
     return r.json();
   }
@@ -1210,10 +1210,10 @@
   /* ---------- 账号（与工作台共用同一登录态；数据按用户隔离） ---------- */
   let _authDone = null, _authMode = 'login';
   function ensureAuth(){
-    if (getToken()){
-      return apiGet('/api/auth/me').catch(function(){ return new Promise(function(res){ openAuth(res); }); });
-    }
-    return new Promise(function(res){ openAuth(res); });
+    return apiGet('/api/auth/me').then(function(d){
+      if (d && d.user){ setSession(d.user); return; }
+      return new Promise(function(res){ openAuth(res); });
+    }).catch(function(){ return new Promise(function(res){ openAuth(res); }); });
   }
   function openAuth(done){
     _authDone = done; setAuthMode('login');
@@ -1236,7 +1236,7 @@
       const r = await fetch('/api/auth/' + _authMode, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p})});
       const data = await r.json();
       if (!r.ok){ err.textContent = (data && data.detail) ? data.detail : '操作失败'; return; }
-      setSession(data.token, data.user);
+      setSession(data.user);
       document.getElementById('authOverlay').classList.remove('show');
       const d = _authDone; _authDone = null; if (d) d();
     } catch(e){ err.textContent = '网络错误，请重试'; }

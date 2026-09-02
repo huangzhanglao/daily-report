@@ -16,7 +16,7 @@ import threading
 from pathlib import Path
 
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 ROOT = Path(__file__).resolve().parent
@@ -478,22 +478,41 @@ def public_register_enabled() -> bool:
         conn.close()
     return bool(row and str(row["value"]).strip().lower() in ("1", "true", "on", "yes"))
 
-def get_uid(authorization: str = Header(default="")) -> str:
-    m = re.match(r"^Bearer\s+(.+)$", authorization or "", re.I)
-    if not m:
+AUTH_COOKIE = "drb_token"
+
+def _is_https(request: Request) -> bool:
+    return request.headers.get("x-forwarded-proto", "").lower() == "https" or request.url.scheme == "https"
+
+def set_auth_cookie(response, token: str, request: Request):
+    # HttpOnly：JS 不可读，根治 XSS 窃 token；SameSite=Lax：缓解 CSRF；HTTPS 下追加 Secure
+    response.set_cookie(AUTH_COOKIE, token, httponly=True, samesite="lax",
+                        secure=_is_https(request), path="/", max_age=60 * 60 * 24 * 30)
+
+def clear_auth_cookie(response):
+    response.delete_cookie(AUTH_COOKIE, path="/")
+
+def get_uid(authorization: str = Header(default=""), request: Request = None) -> str:
+    token = None
+    if request is not None:
+        token = request.cookies.get(AUTH_COOKIE)  # 优先走 HttpOnly cookie（防 XSS 读取）
+    if not token and authorization:
+        m = re.match(r"^Bearer\s+(.+)$", authorization or "", re.I)
+        if m:
+            token = m.group(1)
+    if not token:
         return None
-    return verify_token(m.group(1))
+    return verify_token(token)
 
 
-def require_uid(authorization: str = Header(default="")) -> str:
-    uid = get_uid(authorization)
+def require_uid(authorization: str = Header(default=""), request: Request = None) -> str:
+    uid = get_uid(authorization, request)
     if not uid:
         raise HTTPException(401, "未登录")
     return uid
 
 
-def require_admin(authorization: str = Header(default="")) -> str:
-    uid = get_uid(authorization)
+def require_admin(authorization: str = Header(default=""), request: Request = None) -> str:
+    uid = get_uid(authorization, request)
     if not uid:
         raise HTTPException(401, "未登录")
     conn = get_conn()
@@ -575,7 +594,7 @@ def health():
 
 # ---------------- 认证 ----------------
 @app.post("/api/auth/register")
-async def register(body: dict, request: Request):
+async def register(body: dict, response: Response, request: Request):
     ip = client_ip(request)
     if not rate_limit("reg:" + ip, 5, 600):
         raise HTTPException(429, "注册过于频繁，请稍后再试")
@@ -600,11 +619,13 @@ async def register(body: dict, request: Request):
         conn.commit()
     finally:
         conn.close()
-    return {"token": sign_token(u_id), "user": {"id": u_id, "username": username}}
+    # token 仅写入 HttpOnly cookie，前端 JS 不可读取，根治 XSS 窃 token
+    set_auth_cookie(response, sign_token(u_id), request)
+    return {"user": {"id": u_id, "username": username}}
 
 
 @app.post("/api/auth/login")
-async def login(body: dict, request: Request):
+async def login(body: dict, response: Response, request: Request):
     ip = client_ip(request)
     if not rate_limit("login:" + ip, 12, 300):
         raise HTTPException(429, "登录尝试过于频繁，请稍后再试")
@@ -617,7 +638,15 @@ async def login(body: dict, request: Request):
         conn.close()
     if not u or not verify_password(password, u["salt"], u["hash"]):
         raise HTTPException(401, "用户名或密码错误")
-    return {"token": sign_token(u["id"]), "user": row_to_user(u)}
+    # token 仅写入 HttpOnly cookie，前端 JS 不可读取，根治 XSS 窃 token
+    set_auth_cookie(response, sign_token(u["id"]), request)
+    return {"user": row_to_user(u)}
+
+
+@app.post("/api/auth/logout")
+async def logout(response: Response):
+    clear_auth_cookie(response)
+    return {"ok": True}
 
 
 @app.get("/api/auth/me")

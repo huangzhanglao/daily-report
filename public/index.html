@@ -507,17 +507,17 @@
   /* ---------- api（支持服务端 / 浏览器本地 双模式） ---------- */
   var MODE = null; // 'server' | 'local'
   var LS_KEY = "drb_local_v1";
-  var TOKEN_KEY = "drb_token";
   var USER_KEY = "drb_user";
   var authMode = "login";
   var pendingAuthAction = null; // 登录成功后需要自动续接的动作（如打开写笔记弹窗）
-  var TOKEN = localStorage.getItem(TOKEN_KEY) || null;
+  // token 已改为 HttpOnly cookie（浏览器自动携带，JS 不可读），前端不再存储/读写 token
   var USER = (function(){ try { return JSON.parse(localStorage.getItem(USER_KEY)||"null"); } catch(e){ return null; } })();
 
   function loadLocal(){ try { return JSON.parse(localStorage.getItem(LS_KEY)||"[]"); } catch(e){ return []; } }
   function saveLocal(arr){ try { localStorage.setItem(LS_KEY, JSON.stringify(arr)); } catch(e){} }
-  function authHeader(){ return TOKEN ? { "Authorization": "Bearer " + TOKEN } : {}; }
-  function applyAuth(token, user){ TOKEN = token; USER = user; localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(USER_KEY, JSON.stringify(user)); }
+  // token 由 HttpOnly cookie 自动携带，前端不再注入 Bearer；保留函数以最小化改动，返回空对象
+  function authHeader(){ return {}; }
+  function applyAuth(user){ USER = user; localStorage.setItem(USER_KEY, JSON.stringify(user)); }
   function applyRegisterPolicy(){
     var regTab = document.querySelector('.auth-tab[data-atab="register"]');
     var hint = $("authHint");
@@ -539,9 +539,12 @@
   function showAuth(){ var m=$("authMask"); if(m) m.classList.add("open"); applyRegisterPolicy(); }
   function hideAuth(){ var m=$("authMask"); if(m) m.classList.remove("open"); }
   function logout(){
-    TOKEN=null; USER=null;
-    localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY);
-    MODE="server"; showAuth(); setNet();
+    USER=null;
+    localStorage.removeItem(USER_KEY);
+    // 清除服务端 HttpOnly cookie，避免 token 残留被后续请求复用
+    fetch("/api/auth/logout", { method:"POST" }).finally(function(){
+      MODE="server"; showAuth(); setNet();
+    });
   }
 
   function apiList(){
@@ -860,12 +863,12 @@
   function doLogin(username, password){
     return fetch("/api/auth/login", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({username:username,password:password}) })
       .then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
-      .then(function(x){ if(!x.ok) throw new Error((x.d&&x.d.error)||"用户名或密码错误"); applyAuth(x.d.token, x.d.user); return x.d; });
+      .then(function(x){ if(!x.ok) throw new Error((x.d&&x.d.error)||"用户名或密码错误"); applyAuth(x.d.user); return x.d; });
   }
   function doRegister(username, password){
     return fetch("/api/auth/register", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({username:username,password:password}) })
       .then(function(r){ return r.json().then(function(d){ return { ok:r.ok, d:d }; }); })
-      .then(function(x){ if(!x.ok) throw new Error((x.d&&x.d.error)||"注册失败"); applyAuth(x.d.token, x.d.user); return x.d; });
+      .then(function(x){ if(!x.ok) throw new Error((x.d&&x.d.error)||"注册失败"); applyAuth(x.d.user); return x.d; });
   }
   function reload(){
     apiList().then(function(arr){
@@ -1691,10 +1694,10 @@
     hideAuth(); setNet(); reload(); goCenter();
   }).catch(function(err){
     if (err && err.status === 0){
-      MODE = "local"; TOKEN=null; USER=null; hideAuth(); setNet(); reload(); goCenter();
+      MODE = "local"; USER=null; hideAuth(); setNet(); reload(); goCenter();
     } else {
-      MODE = "server"; TOKEN=null; USER=null;
-      localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY);
+      MODE = "server"; USER=null;
+      localStorage.removeItem(USER_KEY);
       hideAuth(); setNet();
       // 未登录：博客系统默认看「公开」笔记
       noteState.filter = "public";
