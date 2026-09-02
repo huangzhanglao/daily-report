@@ -93,3 +93,22 @@ uvicorn app:app --host 127.0.0.1 --port 8787
 - [ ] 访问 `https://<域名>/` 登录后，`Set-Cookie` 含 `Secure`，响应头含 `Strict-Transport-Security`；
 - [ ] （多实例时）设置 `REDIS_URL` 指向可达的 Redis；
 - [ ] `requirements.txt` 已锁定全部依赖，并跑过 `pip-audit`（历史批次已验证 No known vulnerabilities）。
+
+---
+
+## 5. 本地快速验证 HTTPS（无需安装 Caddy/nginx）
+
+`deploy/_dev_tls_proxy.py` 是一个**仅用于本地验证**的轻量 TLS 反向代理（标准库实现，无外部依赖）：
+在 `127.0.0.1:8443` 用 `deploy/certs/localhost.{crt,key}` 终止 TLS，转发到 `127.0.0.1:8787`，
+并注入 `X-Forwarded-Proto: https`。用来确认“反代一前置，应用就下发 Secure cookie + HSTS”。
+
+```bash
+# 终端 1：启动应用
+uvicorn app:app --host 127.0.0.1 --port 8787
+# 终端 2：启动本地 HTTPS 验证代理
+python deploy/_dev_tls_proxy.py
+# 终端 3：用 -k 忽略自签证书告警做验证
+curl -k -i https://127.0.0.1:8443/api/auth/login ...   # 应看到 Secure cookie + HSTS
+```
+
+> 这不是生产组件，生产请使用第 2 节的 Caddy 或 nginx。
