@@ -1,0 +1,28 @@
+# ============================================================
+# Caddy 反向代理 + 自动 HTTPS —— 部署配置
+# 应用本身跑在 127.0.0.1:8787（uvicorn），由本代理终止 TLS。
+# Caddy 会自动设置 X-Forwarded-Proto / X-Forwarded-For，
+# 应用据此下发 Secure cookie 和 Strict-Transport-Security。
+# ============================================================
+
+{
+    # 生产环境请填你的邮箱（ACME 账号用）；本地测试可删
+    email admin@example.com
+}
+
+# ---------- 本地 / 内网测试 ----------
+# Caddy 用内部 CA 自动为 localhost 签发证书（浏览器会提示“不安全”，属正常，自签性质）。
+localhost, 127.0.0.1 {
+    reverse_proxy 127.0.0.1:8787
+}
+
+# ---------- 生产环境（取消注释，替换为你自己的域名） ----------
+# your.domain.example {
+#     reverse_proxy 127.0.0.1:8787
+# }
+
+# 启动：
+#   本地测试： caddy run --config deploy/Caddyfile
+#   生产：     caddy run --config deploy/Caddyfile --adapter caddyfile
+# 验证：访问 https://localhost:8443/ （或你的域名），登录后查看
+#       Set-Cookie 应带 Secure 标记，响应头应含 Strict-Transport-Security。

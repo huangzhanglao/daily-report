@@ -16,3 +16,6 @@ venv/
 _test_*.js
 _fb_test/
 src_cache/
+
+# 自签测试证书（含私钥，勿入版本库；用 deploy/README.md 的 openssl 命令重新生成）
+deploy/certs/

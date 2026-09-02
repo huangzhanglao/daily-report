@@ -445,11 +445,51 @@ def verify_token(token: str):
 
 
 # ---------- 速率限制 + 注册开关 ----------
-# 说明：内存限流适用于单进程部署（当前 uvicorn 单进程）。若未来多 worker，
-# 需改为 Redis 等共享存储，否则各进程各自计数会放大放行额度。
-_rate_hits = {}
+# 限流后端：默认内存（单进程部署足够）；设置环境变量 REDIS_URL 后切换为 Redis 共享存储，
+# 适用于多 worker / 多实例部署，避免各进程各自计数放大放行额度。Redis 不可达时自动回退内存。
+_rate_hits = {}                 # 内存兜底计数
+_rate_redis = None              # Redis 客户端（惰性初始化）
+_rate_redis_tried = False
+
+def _init_redis():
+    """惰性连接 Redis：仅在配置了 REDIS_URL 且可达时使用；否则返回 None 走内存兜底。"""
+    global _rate_redis, _rate_redis_tried
+    if _rate_redis_tried:
+        return _rate_redis
+    _rate_redis_tried = True
+    url = os.environ.get("REDIS_URL")
+    if not url:
+        return None
+    try:
+        import redis  # 延迟导入：未安装也不影响应用启动（走内存兜底）
+        client = redis.Redis.from_url(url, socket_connect_timeout=1, socket_timeout=1)
+        client.ping()
+        _rate_redis = client
+    except Exception as e:
+        import sys
+        print("[rate-limit] Redis 不可用，回退内存限流：%s" % e, file=sys.stderr)
+        _rate_redis = None
+    return _rate_redis
 
 def rate_limit(key: str, max_count: int, window_seconds: int) -> bool:
+    r = _init_redis()
+    if r is not None:
+        # Redis 滑动窗口：有序集合按时间戳计分，剔除窗口外记录后统计 + 设过期
+        now = time.time()
+        member = "%.6f:%s" % (now, secrets.token_hex(4))
+        try:
+            pipe = r.pipeline()
+            pipe.zremrangebyscore(key, 0, now - window_seconds)
+            pipe.zadd(key, {member: now})
+            pipe.zcard(key)
+            pipe.expire(key, window_seconds)
+            count = pipe.execute()[2]
+        except Exception:
+            return _rate_limit_mem(key, max_count, window_seconds)
+        return count <= max_count
+    return _rate_limit_mem(key, max_count, window_seconds)
+
+def _rate_limit_mem(key: str, max_count: int, window_seconds: int) -> bool:
     now = time.time()
     hits = _rate_hits.setdefault(key, [])
     hits[:] = [t for t in hits if now - t < window_seconds]
