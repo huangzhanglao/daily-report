@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>管理中心 · 应用中心</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --panel: #ffffff; --panel-2: #fbfcfe;
+    --text: #1f2329; --muted: #8a9099; --primary: #3b6cff;
+    --primary-weak: #eaf0ff; --border: #e6e8eb; --danger: #e5484d;
+    --shadow: 0 1px 3px rgba(20,30,50,.06), 0 6px 18px rgba(20,30,50,.05);
+    --radius: 14px;
+  }
+  [data-theme="dark"] {
+    --bg: #15171c; --panel: #1e2128; --panel-2: #23262f;
+    --text: #e8eaed; --muted: #9aa0aa; --primary: #5a82ff;
+    --primary-weak: #23304f; --border: #2c3038; --danger: #ff6166;
+    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.25);
+  }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6; margin: 0; -webkit-font-smoothing: antialiased; }
+  .btn { border: 1px solid var(--border); background: var(--panel); color: var(--text); padding: 7px 14px; border-radius: 9px; font-size: 13px; transition: .15s; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+  .btn:hover { border-color: var(--primary); color: var(--primary); }
+  .btn.primary { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.05); color:#fff; }
+  .btn.danger { color: var(--danger); border-color: var(--danger); background: transparent; }
+  .btn.danger:hover { background: var(--danger); color:#fff; }
+  .btn.ghost { background: transparent; }
+  .btn.sm { padding: 4px 10px; font-size: 12px; }
+  header.topbar { display: flex; align-items: center; gap: 14px; padding: 12px 22px; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top:0; z-index: 30; }
+  .logo { font-weight: 700; font-size: 16px; }
+  .spacer { flex: 1; }
+  .tabs { display: flex; gap: 4px; padding: 0 22px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .tab { padding: 11px 16px; border: none; background: transparent; color: var(--muted); font-size: 14px; border-bottom: 2px solid transparent; cursor: pointer; }
+  .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+  .wrap { max-width: 1080px; margin: 22px auto; padding: 0 22px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px 20px; box-shadow: var(--shadow); margin-bottom: 18px; }
+  .panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  .panel-head h2 { margin: 0; font-size: 16px; }
+  .panel-head .spacer { flex: 1; }
+  .muted { color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  th { color: var(--muted); font-weight: 600; background: var(--panel-2); }
+  tbody tr:hover { background: var(--panel-2); }
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .field label { font-size: 12px; color: var(--muted); }
+  input, select, textarea { padding: 9px 11px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel); color: var(--text); font-size: 13px; width: 100%; font-family: inherit; }
+  textarea { resize: vertical; min-height: 64px; }
+  .row2 { display: flex; gap: 12px; } .row2 > .field { flex: 1; }
+  .modal-mask { position: fixed; inset: 0; background: rgba(20,30,50,.42); display: none; align-items: flex-start; justify-content: center; z-index: 50; padding: 40px 12px; overflow: auto; }
+  .modal-mask.open { display: flex; }
+  .modal { background: var(--panel); border-radius: 14px; width: 480px; max-width: 94vw; padding: 20px; box-shadow: var(--shadow); }
+  .modal h3 { margin: 0 0 14px; font-size: 16px; }
+  .modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+  .x { margin-left: auto; border: none; background: transparent; color: var(--muted); font-size: 20px; cursor: pointer; line-height: 1; }
+  #toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); background: #1f2329; color: #fff; padding: 10px 18px; border-radius: 10px; opacity: 0; transition: .2s; z-index: 99; pointer-events: none; font-size: 13px; }
+  #toast.show { opacity: .96; }
+  .empty { padding: 30px; text-align: center; color: var(--muted); }
+  .pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; background: var(--primary-weak); color: var(--primary); }
+  .pill.off { background: var(--panel-2); color: var(--muted); }
+  .pill.admin { background: #fff1e6; color: #c2640a; }
+  .app-icon-prev { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; font-size: 16px; color: #fff; }
+  .grid-perm { overflow-x: auto; }
+  .noperm { padding: 50px; text-align: center; color: var(--muted); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  code { background: var(--panel-2); padding: 1px 6px; border-radius: 6px; font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <button class="btn ghost" id="btnHome">← 应用中心</button>
+  <div class="logo">⚙ 管理中心</div>
+  <div class="spacer"></div>
+  <span id="who" class="muted"></span>
+  <button class="btn ghost" id="btnLogout">退出</button>
+</header>
+
+<nav class="tabs" id="navTabs">
+  <button class="tab active" data-tab="apps">应用管理</button>
+  <button class="tab" data-tab="perms">权限管理</button>
+  <button class="tab" data-tab="users">用户管理</button>
+  <button class="tab" data-tab="guide">操作说明</button>
+</nav>
+
+<main class="wrap" id="mainWrap">
+  <div id="gate" class="panel noperm" style="display:none">正在校验权限…</div>
+
+  <!-- 应用管理 -->
+  <section class="panel" id="tab-apps">
+    <div class="panel-head">
+      <h2>应用管理</h2>
+      <div class="spacer"></div>
+      <button class="btn primary" id="btnNewApp">+ 新增应用</button>
+    </div>
+    <div id="appsTableWrap"><div class="empty">加载中…</div></div>
+  </section>
+
+  <!-- 权限管理 -->
+  <section class="panel" id="tab-perms" style="display:none">
+    <div class="panel-head"><h2>权限管理</h2><div class="spacer"></div><span class="muted">勾选即代表该用户可使用对应应用；每个用户拥有独立的应用集合。</span></div>
+    <div class="grid-perm"><div id="permsWrap"><div class="empty">加载中…</div></div></div>
+  </section>
+
+  <!-- 用户管理 -->
+  <section class="panel" id="tab-users" style="display:none">
+    <div class="panel-head">
+      <h2>用户管理</h2>
+      <div class="spacer"></div>
+      <button class="btn primary" id="btnNewUser">+ 新增用户</button>
+    </div>
+    <div id="usersTableWrap"><div class="empty">加载中…</div></div>
+  </section>
+
+  <!-- 操作说明 -->
+  <section class="panel" id="tab-guide" style="display:none">
+    <div class="panel-head"><h2>操作说明 / 首页简介</h2><div class="spacer"></div><button class="btn primary" id="btnSaveGuide">保存</button></div>
+    <div class="field">
+      <label>首页简介（显示在应用中心顶部，所有访客可见）</label>
+      <textarea id="setHomeIntro" rows="3"></textarea>
+    </div>
+    <div class="field">
+      <label>操作说明（显示在「操作说明」标签页，管理员可编辑）</label>
+      <textarea id="setGuide" rows="12"></textarea>
+    </div>
+    <div class="hint">支持纯文本，换行即分段。保存后立即对所有用户生效。</div>
+  </section>
+</main>
+
+<!-- 应用编辑弹窗 -->
+<div class="modal-mask" id="appModal">
+  <div class="modal">
+    <div style="display:flex;align-items:center"><h3 id="appModalTitle">新增应用</h3><button class="x" data-close="appModal">×</button></div>
+    <div class="row2">
+      <div class="field"><label>应用标识（key）</label><input id="fKey" placeholder="如 finance"></div>
+      <div class="field"><label>应用名称</label><input id="fName" placeholder="如 财务工作台"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>图标（emoji）</label><input id="fIcon" placeholder="💰"></div>
+      <div class="field"><label>排序</label><input id="fSort" type="number" value="0"></div>
+    </div>
+    <div class="field"><label>入口（entry）</label><input id="fEntry" placeholder="finance.html 或 report / blog">
+      <div class="hint">内置视图填 <code>report</code> / <code>blog</code>；独立页面填文件名如 <code>finance.html</code>、<code>tax.html</code>。</div>
+    </div>
+    <div class="field"><label>图标配色（CSS 背景）</label><input id="fColor" placeholder="linear-gradient(135deg,#f59e0b,#fbbf24)"></div>
+    <div class="field"><label>简介</label><textarea id="fDesc" rows="2"></textarea></div>
+    <div class="field"><label>详情说明（进入应用后可见，可选）</label><textarea id="fAppIntro" rows="2"></textarea></div>
+    <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><input id="fEnabled" type="checkbox" checked style="width:auto"> 启用（关闭后该应用对所有人都不可见）</label>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close="appModal">取消</button>
+      <button class="btn primary" id="btnSaveApp">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 用户编辑弹窗 -->
+<div class="modal-mask" id="userModal">
+  <div class="modal">
+    <div style="display:flex;align-items:center"><h3 id="userModalTitle">新增用户</h3><button class="x" data-close="userModal">×</button></div>
+    <div class="field"><label>用户名</label><input id="uName" placeholder="3-20 位"></div>
+    <div class="row2">
+      <div class="field"><label>显示名称</label><input id="uDisplay" placeholder="可选"></div>
+      <div class="field"><label>角色</label>
+        <select id="uRole"><option value="user">普通用户</option><option value="admin">管理员</option></select>
+      </div>
+    </div>
+    <div class="field"><label>密码</label><input id="uPwd" type="text" placeholder="新建必填（≥6 位）；编辑时留空表示不修改">
+      <div class="hint">创建后默认授予当前所有已启用应用，可在「权限管理」中调整。</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" data-close="userModal">取消</button>
+      <button class="btn primary" id="btnSaveUser">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var TOKEN_KEY = "drb_token", USER_KEY = "drb_user";
+  var TOKEN = localStorage.getItem(TOKEN_KEY) || null;
+  var USER = (function(){ try { return JSON.parse(localStorage.getItem(USER_KEY)||"null"); } catch(e){ return null; } })();
+  var editingAppKey = null, editingUserId = null;
+
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return (s==null?"":String(s)).replace(/[&<>\"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function authHeader(){ return TOKEN ? {"Authorization":"Bearer "+TOKEN} : {}; }
+  function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove("show"); }, 2200); }
+
+  function api(method, path, body){
+    var opts = { method: method, headers: Object.assign({"Content-Type":"application/json"}, authHeader()) };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    return fetch(path, opts).then(function(r){ return r.json().then(function(d){ return {status:r.status, data:d}; }).catch(function(){ return {status:r.status, data:{}}; }); });
+  }
+
+  function logout(){ TOKEN=null; USER=null; localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); location.href="index.html"; }
+
+  function showGate(msg){ $("gate").style.display=""; $("gate").textContent = msg; ["tab-apps","tab-perms","tab-users","tab-guide"].forEach(function(id){ $(id).style.display="none"; }); }
+
+  /* ---------- 初始化：校验管理员权限 ---------- */
+  function init(){
+    if (!TOKEN){ showGate("未登录，请先到应用中心登录后再访问管理中心。"); return; }
+    api("GET","/api/auth/me").then(function(res){
+      if (res.status !== 200 || !res.data.user || res.data.user.role !== "admin"){ showGate("无权限：管理中心仅对管理员开放。"); return; }
+      USER = res.data.user; localStorage.setItem(USER_KEY, JSON.stringify(USER));
+      $("who").textContent = "当前：" + (USER.displayName || USER.username) + "（管理员）";
+      loadApps(); loadPerms(); loadUsers(); loadGuide();
+    }).catch(function(){ showGate("无法连接服务端，请确认服务已启动。"); });
+  }
+
+  /* ---------- 标签切换 ---------- */
+  $("navTabs").onclick = function(e){
+    var t = e.target.closest(".tab"); if(!t) return;
+    var name = t.getAttribute("data-tab");
+    document.querySelectorAll("#navTabs .tab").forEach(function(x){ x.classList.toggle("active", x===t); });
+    ["apps","perms","users","guide"].forEach(function(n){ $("tab-"+n).style.display = (n===name) ? "" : "none"; });
+    if (name==="apps") loadApps();
+    if (name==="perms") loadPerms();
+    if (name==="users") loadUsers();
+    if (name==="guide") loadGuide();
+  };
+
+  /* ---------- 应用管理 ---------- */
+  function loadApps(){
+    api("GET","/api/admin/apps").then(function(res){
+      if (res.status !== 200){ $("appsTableWrap").innerHTML='<div class="empty">加载失败</div>'; return; }
+      var apps = res.data.apps || [];
+      if (!apps.length){ $("appsTableWrap").innerHTML='<div class="empty">还没有应用，点击右上角「新增应用」添加。</div>'; return; }
+      var rows = apps.map(function(a){
+        var col = a.color || "#888";
+        return '<tr>'+
+          '<td><span class="app-icon-prev" style="background:'+esc(col)+'">'+esc(a.icon||"📦")+'</span></td>'+
+          '<td><b>'+esc(a.name)+'</b><br><span class="muted">'+esc(a.key)+'</span></td>'+
+          '<td class="muted">'+esc(a.entry||"")+'</td>'+
+          '<td>'+(a.enabled ? '<span class="pill">已启用</span>' : '<span class="pill off">已停用</span>')+'</td>'+
+          '<td>'+esc(a.desc||"")+'</td>'+
+          '<td style="text-align:right;white-space:nowrap">'+
+            '<button class="btn sm" data-edit-app="'+esc(a.key)+'">编辑</button> '+
+            '<button class="btn sm danger" data-del-app="'+esc(a.key)+'">删除</button>'+
+          '</td></tr>';
+      }).join("");
+      $("appsTableWrap").innerHTML = '<table><thead><tr><th></th><th>名称 / 标识</th><th>入口</th><th>状态</th><th>简介</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+    });
+  }
+  $("appsTableWrap").onclick = function(e){
+    var ed = e.target.closest("[data-edit-app]"); if (ed){ openAppModal(ed.getAttribute("data-edit-app")); return; }
+    var dl = e.target.closest("[data-del-app]");
+    if (dl){ var k=dl.getAttribute("data-del-app"); if(confirm("确定删除应用「"+k+"」？该操作会一并移除所有用户的对应授权。")){
+      api("DELETE","/api/admin/apps/"+encodeURIComponent(k)).then(function(r){ if(r.status===200){ toast("已删除"); loadApps(); loadPerms(); } else toast("删除失败"); });
+    } return; }
+  };
+  $("btnNewApp").onclick = function(){ openAppModal(null); };
+
+  function openAppModal(key){
+    editingAppKey = key;
+    $("appModalTitle").textContent = key ? "编辑应用" : "新增应用";
+    if (key){
+      api("GET","/api/admin/apps").then(function(res){
+        var a = (res.data.apps||[]).find(function(x){ return x.key===key; }); if(!a) return;
+        $("fKey").value=a.key; $("fKey").disabled=true; $("fName").value=a.name;
+        $("fIcon").value=a.icon||""; $("fSort").value=a.sort||0; $("fEntry").value=a.entry||"";
+        $("fColor").value=a.color||""; $("fDesc").value=a.desc||""; $("fAppIntro").value=a.intro||"";
+        $("fEnabled").checked = !!a.enabled;
+      });
+    } else {
+      ["fKey","fName","fIcon","fEntry","fColor","fDesc","fAppIntro"].forEach(function(id){ $(id).value=""; });
+      $("fKey").disabled=false; $("fSort").value=0; $("fEnabled").checked=true;
+    }
+    $("appModal").classList.add("open");
+  }
+  $("btnSaveApp").onclick = function(){
+    var payload = {
+      key: $("fKey").value.trim(), name: $("fName").value.trim(),
+      icon: $("fIcon").value.trim(), entry: $("fEntry").value.trim(),
+      color: $("fColor").value.trim(), desc: $("fDesc").value.trim(),
+      intro: $("fAppIntro").value.trim(), sort: parseInt($("fSort").value||"0",10),
+      enabled: $("fEnabled").checked
+    };
+    if (!/^[a-zA-Z0-9_-]{2,32}$/.test(payload.key)){ toast("应用标识需为 2-32 位字母/数字/下划线"); return; }
+    if (!payload.name){ toast("请填写应用名称"); return; }
+    var p = editingAppKey ? api("PUT","/api/admin/apps/"+encodeURIComponent(editingAppKey), payload)
+                          : api("POST","/api/admin/apps", payload);
+    p.then(function(r){
+      if (r.status===200 || r.status===201){ toast("已保存"); $("appModal").classList.remove("open"); loadApps(); loadPerms(); }
+      else if (r.status===409){ toast("应用标识已存在"); }
+      else { toast("保存失败：" + (r.data.error||r.status)); }
+    });
+  };
+
+  /* ---------- 权限管理（矩阵） ---------- */
+  function loadPerms(){
+    api("GET","/api/admin/permissions").then(function(res){
+      if (res.status !== 200){ $("permsWrap").innerHTML='<div class="empty">加载失败</div>'; return; }
+      var users = res.data.users || [], apps = res.data.apps || [], grants = res.data.grants || {};
+      if (!apps.length){ $("permsWrap").innerHTML='<div class="empty">暂无应用，请先在「应用管理」创建。</div>'; return; }
+      var head = "<tr><th>用户</th>" + apps.map(function(a){ return "<th style='text-align:center'>"+esc(a.icon||"")+" "+esc(a.name)+"</th>"; }).join("") + "</tr>";
+      var body = users.map(function(u){
+        var g = grants[u.id] || {};
+        var cells = apps.map(function(a){
+          var on = g[a.key] === true;
+          return "<td style='text-align:center'><input type='checkbox' data-uid='"+esc(u.id)+"' data-app='"+esc(a.key)+"' "+(on?"checked":"")+"></td>";
+        }).join("");
+        var rolePill = u.role==="admin" ? "<span class='pill admin'>管理员</span>" : "<span class='muted'>用户</span>";
+        return "<tr><td><b>"+esc(u.username)+"</b> "+rolePill+"<br><span class='muted'>"+esc(u.displayName||"")+"</span></td>"+cells+"</tr>";
+      }).join("");
+      $("permsWrap").innerHTML = "<table><thead>"+head+"</thead><tbody>"+body+"</tbody></table>";
+      $("permsWrap").querySelectorAll("input[type=checkbox]").forEach(function(cb){
+        cb.addEventListener("change", function(){
+          var uid = cb.getAttribute("data-uid"), app = cb.getAttribute("data-app"), granted = cb.checked;
+          api("PUT","/api/admin/permissions", { user_id: uid, app_key: app, granted: granted }).then(function(r){
+            if (r.status===200) toast((granted?"已开通":"已收回")+" "+app); else { cb.checked=!granted; toast("更新失败"); }
+          });
+        });
+      });
+    });
+  }
+
+  /* ---------- 用户管理 ---------- */
+  function loadUsers(){
+    api("GET","/api/admin/users").then(function(res){
+      if (res.status !== 200){ $("usersTableWrap").innerHTML='<div class="empty">加载失败</div>'; return; }
+      var users = res.data.users || [];
+      if (!users.length){ $("usersTableWrap").innerHTML='<div class="empty">还没有用户。</div>'; return; }
+      var rows = users.map(function(u){
+        var rolePill = u.role==="admin" ? "<span class='pill admin'>管理员</span>" : "<span class='pill off'>普通用户</span>";
+        return "<tr>"+
+          "<td><b>"+esc(u.username)+"</b><br><span class='muted'>"+esc(u.displayName||"")+"</span></td>"+
+          "<td>"+rolePill+"</td>"+
+          "<td class='muted'>"+(u.createdAt?new Date(u.createdAt).toLocaleDateString():"")+"</td>"+
+          "<td style='text-align:right;white-space:nowrap'>"+
+            "<button class='btn sm' data-edit-user='"+esc(u.id)+"'>编辑</button> "+
+            "<button class='btn sm danger' data-del-user='"+esc(u.id)+"'>删除</button>"+
+          "</td></tr>";
+      }).join("");
+      $("usersTableWrap").innerHTML = "<table><thead><tr><th>用户名 / 显示名</th><th>角色</th><th>注册时间</th><th></th></tr></thead><tbody>"+rows+"</tbody></table>";
+    });
+  }
+  $("usersTableWrap").onclick = function(e){
+    var ed = e.target.closest("[data-edit-user]"); if (ed){ openUserModal(ed.getAttribute("data-edit-user")); return; }
+    var dl = e.target.closest("[data-del-user]");
+    if (dl){ var id=dl.getAttribute("data-del-user"); if(confirm("确定删除该用户？其日报、笔记、财务与报税数据将一并删除，且不可恢复。")){
+      api("DELETE","/api/admin/users/"+encodeURIComponent(id)).then(function(r){ if(r.status===200){ toast("已删除"); loadUsers(); loadPerms(); } else toast("删除失败："+(r.data.error||r.status)); });
+    } return; }
+  };
+  $("btnNewUser").onclick = function(){ openUserModal(null); };
+
+  function openUserModal(id){
+    editingUserId = id;
+    $("userModalTitle").textContent = id ? "编辑用户" : "新增用户";
+    if (id){
+      api("GET","/api/admin/users").then(function(res){
+        var u = (res.data.users||[]).find(function(x){ return x.id===id; }); if(!u) return;
+        $("uName").value=u.username; $("uName").disabled=true; $("uDisplay").value=u.displayName||"";
+        $("uRole").value=u.role||"user"; $("uPwd").value=""; $("uPwd").placeholder="留空表示不修改";
+      });
+    } else {
+      $("uName").value=""; $("uName").disabled=false; $("uDisplay").value=""; $("uRole").value="user";
+      $("uPwd").value=""; $("uPwd").placeholder="新建必填（≥6 位）";
+    }
+    $("userModal").classList.add("open");
+  }
+  $("btnSaveUser").onclick = function(){
+    var name = $("uName").value.trim(), pwd = $("uPwd").value, disp = $("uDisplay").value.trim(), role = $("uRole").value;
+    if (editingUserId){
+      var body = { displayName: disp, role: role };
+      if (pwd){ if (pwd.length<6){ toast("密码至少 6 位"); return; } body.password = pwd; }
+      api("PUT","/api/admin/users/"+encodeURIComponent(editingUserId), body).then(function(r){
+        if (r.status===200){ toast("已保存"); $("userModal").classList.remove("open"); loadUsers(); } else toast("保存失败："+(r.data.error||r.status));
+      });
+    } else {
+      if (name.length<3){ toast("用户名需 3-20 位"); return; }
+      if (pwd.length<6){ toast("密码至少 6 位"); return; }
+      api("POST","/api/admin/users", { username:name, password:pwd, displayName:disp, role:role }).then(function(r){
+        if (r.status===200){ toast("已创建"); $("userModal").classList.remove("open"); loadUsers(); loadPerms(); } else if (r.status===409){ toast("用户名已存在"); } else toast("创建失败："+(r.data.error||r.status));
+      });
+    }
+  };
+
+  /* ---------- 操作说明 / 首页简介 ---------- */
+  function loadGuide(){
+    api("GET","/api/settings").then(function(res){
+      var s = (res.data && res.data.settings) || {};
+      $("setHomeIntro").value = s.home_intro || "";
+      $("setGuide").value = s.guide || "";
+    });
+  }
+  $("btnSaveGuide").onclick = function(){
+    api("PUT","/api/admin/settings", { home_intro: $("setHomeIntro").value, guide: $("setGuide").value }).then(function(r){
+      if (r.status===200) toast("已保存，对所有用户立即生效"); else toast("保存失败");
+    });
+  };
+
+  /* ---------- 通用弹窗/导航/退出 ---------- */
+  document.querySelectorAll("[data-close]").forEach(function(x){ x.onclick = function(){ $(x.getAttribute("data-close")).classList.remove("open"); }; });
+  document.querySelectorAll(".modal-mask").forEach(function(m){ m.onclick = function(e){ if (e.target===m) m.classList.remove("open"); }; });
+  $("btnHome").onclick = function(){ location.href = "index.html"; };
+  $("btnLogout").onclick = logout;
+
+  init();
+})();
+</script>
+</body>
+</html>

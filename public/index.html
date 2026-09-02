@@ -187,6 +187,40 @@
   .md-tools { display: flex; gap: 4px; margin-bottom: 8px; flex-wrap: wrap; }
   .md-tools button { border: 1px solid var(--border); background: var(--panel-2); color: var(--muted); border-radius: 7px; padding: 4px 9px; font-size: 12px; cursor: pointer; }
   .md-tools button:hover { color: var(--primary); border-color: var(--primary); }
+  /* 笔记 Markdown 编辑器（仿 CSDN 分屏） */
+  .note-modal { max-width: 1000px; max-height: 94vh; display: flex; flex-direction: column; }
+  .note-modal .modal-body { max-height: calc(94vh - 130px); overflow: auto; }
+  .md-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+  .md-viewmode { display: inline-flex; background: var(--tag-bg); border-radius: 9px; padding: 3px; gap: 2px; }
+  .md-viewmode button { border: none; background: transparent; padding: 5px 12px; border-radius: 7px; color: var(--muted); font-size: 13px; cursor: pointer; }
+  .md-viewmode button.active { background: var(--panel); color: var(--primary); font-weight: 600; box-shadow: var(--shadow); }
+  .md-split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .md-split.only-edit { grid-template-columns: 1fr; }
+  .md-split.only-edit .md-preview { display: none; }
+  .md-split.only-preview { grid-template-columns: 1fr; }
+  .md-split.only-preview .md-input { display: none; }
+  .md-input textarea { width: 100%; height: 460px; min-height: 320px; resize: vertical; line-height: 1.7; font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 13.5px; tab-size: 2; }
+  .md-preview { border: 1px solid var(--border); border-radius: 10px; background: var(--panel-2); padding: 16px 18px; overflow: auto; height: 460px; min-height: 320px; }
+  .md-hint { margin-top: 8px; color: var(--muted); font-size: 12px; }
+  /* Markdown 正文排版（详情页与预览共用） */
+  .md-body { line-height: 1.75; color: var(--text); font-size: 15px; word-break: break-word; white-space: normal; }
+  .md-body h1, .md-body h2, .md-body h3, .md-body h4 { line-height: 1.3; margin: 18px 0 10px; }
+  .md-body h1 { font-size: 24px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .md-body h2 { font-size: 20px; }
+  .md-body h3 { font-size: 17px; }
+  .md-body p { margin: 10px 0; }
+  .md-body ul, .md-body ol { margin: 10px 0; padding-left: 24px; }
+  .md-body li { margin: 4px 0; }
+  .md-body code { background: var(--tag-bg); padding: 2px 6px; border-radius: 5px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }
+  .md-body pre.md-pre { background: #0f1115; color: #e6e6e6; padding: 14px 16px; border-radius: 10px; overflow: auto; margin: 12px 0; }
+  .md-body pre.md-pre code { background: transparent; padding: 0; color: inherit; font-size: 13px; }
+  .md-body blockquote { border-left: 4px solid var(--primary); padding: 4px 14px; margin: 12px 0; color: var(--muted); background: var(--tag-bg); border-radius: 0 8px 8px 0; }
+  .md-body a { color: var(--primary); text-decoration: none; }
+  .md-body a:hover { text-decoration: underline; }
+  .md-body img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+  .md-body hr { border: none; border-top: 1px solid var(--border); margin: 18px 0; }
+  [data-theme="dark"] .md-body pre.md-pre { background: #11131a; }
+  .bd-content.md-body { white-space: normal; }
 
   /* 应用中心 */
   .center-hero { background: linear-gradient(120deg,#3b6cff,#7aa0ff); border-radius: 18px; padding: 30px 30px; color: #fff; box-shadow: var(--shadow); margin-bottom: 22px; }
@@ -198,6 +232,8 @@
   .app-icon { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; font-size: 32px; margin-bottom: 16px; box-shadow: 0 8px 20px rgba(40,70,160,.25); }
   .app-card.report .app-icon { background: linear-gradient(135deg,#3b6cff,#7aa0ff); }
   .app-card.blog .app-icon { background: linear-gradient(135deg,#11b886,#37d6a4); }
+  .app-card.finance .app-icon { background: linear-gradient(135deg,#f59e0b,#fbbf24); }
+  .app-card.tax .app-icon { background: linear-gradient(135deg,#6366f1,#8b5cf6); }
   .app-name { font-size: 19px; font-weight: 700; margin-bottom: 8px; }
   .app-desc { color: var(--muted); font-size: 13px; line-height: 1.7; }
   .app-go { margin-top: 18px; color: var(--primary); font-weight: 600; font-size: 14px; }
@@ -291,23 +327,13 @@
   </section>
   <section class="view active" id="view-center">
     <div class="center-hero">
-      <h1>🧭 应用中心</h1>
-      <p>选择你要进入的应用。无需登录即可浏览；日报与你的私有内容登录后使用。</p>
-    </div>
-    <div class="app-grid" id="appGrid">
-      <div class="app-card report" data-app="report">
-        <div class="app-icon">📋</div>
-        <div class="app-name">日报工作台</div>
-        <div class="app-desc">记录每日上午 / 下午的工作，按点汇总，一键生成可汇报给领导的周报长图。</div>
-        <div class="app-go">进入 →</div>
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <h1 id="centerTitle" style="margin:0">🧭 应用中心</h1>
+        <button class="btn ghost" id="btnSettings" style="display:none">⚙ 设置</button>
       </div>
-      <div class="app-card blog" data-app="blog">
-        <div class="app-icon">📚</div>
-        <div class="app-name">博客系统</div>
-        <div class="app-desc">对标 CSDN 写笔记、发文章。支持私有 / 公开，公开内容可在简历与首页广场展示。</div>
-        <div class="app-go">进入 →</div>
-      </div>
+      <p id="centerIntro">正在加载…</p>
     </div>
+    <div class="app-grid" id="appGrid"></div>
   </section>
 
   <section class="view" id="view-note">
@@ -355,16 +381,18 @@
 </div>
 
 <div class="modal-mask" id="noteModal">
-  <div class="modal">
+  <div class="modal note-modal">
     <div class="modal-head"><h2 id="noteModalTitle">写笔记</h2><button class="x" id="noteModalClose">×</button></div>
     <div class="modal-body">
-      <div class="field"><label>标题</label><input id="noteTitle" placeholder="给你的笔记起个标题，如：Node 服务部署踩坑记"></div>
       <div class="row2">
+        <div class="field"><label>标题</label><input id="noteTitle" placeholder="给你的笔记起个标题，如：Node 服务部署踩坑记"></div>
         <div class="field"><label>分类（可选）</label><input id="noteCategory" placeholder="如：后端 / 前端 / 随笔"></div>
+      </div>
+      <div class="row2">
         <div class="field"><label>标签（逗号分隔，可选）</label><input id="noteTags" placeholder="Node, 部署, 心得"></div>
+        <div class="field"><label>封面图（可选，填图片链接；留空则自动生成渐变封面）</label><input id="noteCover" placeholder="https://… 或留空"></div>
       </div>
       <div class="field"><label>摘要（展示在列表卡片上，可选）</label><input id="noteSummary" placeholder="一句话说清这篇笔记讲什么"></div>
-      <div class="field"><label>封面图（可选，填图片链接；留空则自动生成渐变封面）</label><input id="noteCover" placeholder="https://… 或留空"></div>
       <div class="field">
         <label>可见范围</label>
         <div class="vis-row">
@@ -373,15 +401,31 @@
         </div>
       </div>
       <div class="field">
-        <label>正文</label>
-        <div class="md-tools">
-          <button type="button" data-md="h">H1</button>
-          <button type="button" data-md="b">加粗</button>
-          <button type="button" data-md="code">代码</button>
-          <button type="button" data-md="list">列表</button>
-          <button type="button" data-md="quote">引用</button>
+        <div class="md-bar">
+          <div class="md-tools">
+            <button type="button" data-md="h1">H1</button>
+            <button type="button" data-md="h2">H2</button>
+            <button type="button" data-md="h3">H3</button>
+            <button type="button" data-md="b">加粗</button>
+            <button type="button" data-md="i">斜体</button>
+            <button type="button" data-md="code">代码</button>
+            <button type="button" data-md="list">列表</button>
+            <button type="button" data-md="quote">引用</button>
+            <button type="button" data-md="link">链接</button>
+            <button type="button" data-md="img">图片</button>
+            <button type="button" data-md="hr">分割线</button>
+          </div>
+          <div class="md-viewmode" id="noteViewMode">
+            <button type="button" data-vm="split" class="active">分屏</button>
+            <button type="button" data-vm="edit">编辑</button>
+            <button type="button" data-vm="preview">预览</button>
+          </div>
         </div>
-        <textarea id="noteContent" placeholder="在这里写笔记正文，支持 Markdown 语法。对标 CSDN：分章节、配代码块、加粗重点。"></textarea>
+        <div class="md-split" id="noteSplit">
+          <div class="md-input"><textarea id="noteContent" placeholder="在这里写笔记正文，支持 Markdown。左侧编辑、右侧实时预览（仿 CSDN）。&#10;&#10;# 一级标题&#10;## 二级标题&#10;**加粗**、*斜体*、`行内代码`&#10;&#10;> 引用一句&#10;&#10;- 列表项一&#10;- 列表项二&#10;&#10;1. 有序一&#10;2. 有序二"></textarea></div>
+          <div class="md-preview md-body" id="notePreview"></div>
+        </div>
+        <div class="md-hint">Markdown 实时预览；可切「分屏 / 编辑 / 预览」。发布后详情页同样按 Markdown 渲染。</div>
       </div>
       <div class="hint">笔记默认公开并展示在首页笔记广场；设为私有则只有你自己可见。作者记录为当前账号，只有你能编辑/删除。</div>
     </div>
@@ -397,7 +441,7 @@
     <div class="modal-head"><h2 id="bdTitle"></h2><button class="x" id="blogDetailClose">×</button></div>
     <div class="modal-body">
       <div class="bd-meta" id="bdMeta"></div>
-      <div class="bd-content" id="bdContent"></div>
+      <div class="bd-content md-body" id="bdContent"></div>
     </div>
     <div class="modal-foot" id="blogDetailFoot"></div>
   </div>
@@ -408,10 +452,10 @@
     <div class="modal-head"><h2>📥 智能粘贴导入</h2><button class="x" id="pasteClose">×</button></div>
     <div class="modal-body">
       <div class="field">
-        <label>把内容粘贴到这里（自动识别日期并映射到对应日报）</label>
-        <textarea id="pasteInput" placeholder="支持多种格式，例如：&#10;2026-09-01&#9;完成需求评审&#10;2026-09-02&#9;修复登录 bug&#10;&#10;或：&#10;2026-09-01 上午 - 参加周会&#10;2026-09-01 下午 - 写技术方案&#10;&#10;或：&#10;9月1日&#10;- 要点1&#10;- 要点2"></textarea>
+        <label>把内容粘贴到这里（粘贴后自动解析 · 支持纯文本 / Excel表格 / Markdown表格 / JSON）</label>
+        <textarea id="pasteInput" placeholder="粘贴即自动解析，支持：&#10;&#10;① 纯文本（日期在行首）&#10;2026-09-01 上午 - 参加周会&#10;2026-09-01 下午 - 写技术方案&#10;&#10;② 两列：日期⇥内容&#10;2026-09-02&#9;修复登录 bug&#10;&#10;③ 表格（含表头，可多列）&#10;日期&#9;上午&#9;下午&#10;2026-09-01&#9;需求评审&#9;写方案&#10;&#10;④ JSON：[{'date':'2026-09-01','morning':'评审','afternoon':'方案'}]"></textarea>
       </div>
-      <div class="hint">解析规则：日期可在「每行行首」「表格两列（日期⇥内容）」「日期标题+多行要点」中出现；时段默认「全天」，可在下方预览中逐条修改。识别不到日期的行会被忽略。</div>
+      <div class="hint">自动识别规则：① 纯文本——日期出现在行首或「日期 时段 - 内容」；② 表格——Excel/CSV 复制（Tab 分隔）或 Markdown 表格（| 分隔），自动定位日期列与时段列（上午/下午/全天/内容）；③ JSON 数组，字段支持 date/日期、morning/上午、afternoon/下午、content/内容、points。时段默认可在预览中逐条修改。</div>
       <div id="pastePreview" style="margin-top:14px"></div>
     </div>
     <div class="modal-foot">
@@ -588,6 +632,42 @@
     $("view-note").classList.remove("active");
     $("view-center").classList.add("active");
     renderNav();
+    renderCenter();
+  }
+
+  /* 应用中心：从后端按用户权限拉取应用列表 + 首页元信息 */
+  function renderCenter(){
+    // 首页标题 / 简介（含管理员可改的首页简介）
+    fetch("/api/settings").then(function(r){ return r.ok ? r.json() : null; }).then(function(d){
+      if (!d) return;
+      var s = d.settings || {};
+      if (s.app_center_title) $("centerTitle").textContent = s.app_center_title;
+      if (s.home_intro != null) $("centerIntro").textContent = s.home_intro;
+      $("btnSettings").style.display = (USER && USER.role === "admin") ? "" : "none";
+    }).catch(function(){});
+    loadApps();
+  }
+  function loadApps(){
+    var grid = $("appGrid");
+    grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="big">⏳</div>正在加载应用…</div>';
+    fetch("/api/apps", { headers: authHeader() }).then(function(r){ return r.ok ? r.json() : {apps:[]}; }).then(function(d){
+      var apps = (d && d.apps) || [];
+      if (!apps.length){ grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="big">📭</div>暂无可用应用。如需使用，请联系管理员在「设置 → 权限管理」中为你开通。</div>'; return; }
+      grid.innerHTML = "";
+      apps.forEach(function(a){
+        var card = document.createElement("div");
+        card.className = "app-card";
+        card.setAttribute("data-app", a.key);
+        card.setAttribute("data-entry", a.entry || a.key);
+        var iconStyle = a.color ? (' style="background:'+esc(a.color)+'"') : "";
+        card.innerHTML =
+          '<div class="app-icon"'+iconStyle+'>'+esc(a.icon||"📦")+'</div>'+
+          '<div class="app-name">'+esc(a.name||a.key)+'</div>'+
+          '<div class="app-desc">'+esc(a.desc||"")+'</div>'+
+          '<div class="app-go">进入 →</div>';
+        grid.appendChild(card);
+      });
+    }).catch(function(){ grid.innerHTML = '<div class="empty" style="grid-column:1/-1"><div class="big">⚠️</div>应用加载失败，请确认服务已连接。</div>'; });
   }
 
   /* ---------- 笔记（我的 / 公开） ---------- */
@@ -636,7 +716,7 @@
       $("bdTitle").textContent = b.title || "无标题";
       var tags=(b.tags||[]).map(function(t){ return '<span class="note-tag">'+esc(t)+'</span>'; }).join(" ");
       $("bdMeta").innerHTML = '✍️ '+esc(b.authorName||"匿名")+'　·　'+fmtDate(b.createdAt) + (b.category?('　·　'+esc(b.category)):'') + (tags?('　·　'+tags):'') + '　·　'+(b.visibility==="private"?"🔒 私有":"🌐 公开");
-      $("bdContent").textContent = b.content || "";
+      $("bdContent").innerHTML = mdToHtml(b.content || "");
       var own = USER && b.authorId === USER.id;
       $("blogDetailFoot").innerHTML = own
         ? '<button class="btn ghost" id="bdEdit">编辑</button><button class="btn ghost" id="bdDel">删除</button><button class="btn primary" id="bdClose">关闭</button>'
@@ -648,6 +728,50 @@
       }
       $("bdClose").onclick = function(){ $("blogDetailMask").classList.remove("open"); };
     }).catch(function(){ toast("加载失败"); });
+  }
+  /* ---------- Markdown 渲染（仿 CSDN，内置轻量实现，无外部依赖） ---------- */
+  
+  function mdToHtml(src){
+    if (!src) return "";
+    var blocks = [], idx = 0;
+    src = src.replace(/```([\s\S]*?)```/g, function(m, code){
+      var body = code.replace(/^[a-zA-Z0-9_+-]*\n?/, "");
+      blocks.push('<pre class="md-pre"><code>'+esc(body.replace(/\n$/,""))+'</code></pre>');
+      return "@@MDC"+(idx++)+"@@";
+    });
+    function inline(t){
+      t = esc(t);
+      t = t.replace(/`([^`]+)`/g, function(m,c){ return "<code>"+c+"</code>"; });
+      t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+      t = t.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+      t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, '<img alt="$1" src="$2">');
+      t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      return t;
+    }
+    var lines = src.split("\n"), html = [], i = 0;
+    while (i < lines.length){
+      var line = lines[i];
+      var ph = line.match(/^@@MDC(\d+)@@$/);
+      if (ph){ html.push(blocks[+ph[1]]); i++; continue; }
+      if (/^\s*$/.test(line)){ i++; continue; }
+      var h = line.match(/^(#{1,6})\s+(.*)$/);
+      if (h){ var lv = h[1].length; html.push("<h"+lv+">"+inline(h[2])+"</h"+lv+">"); i++; continue; }
+      if (/^(\*{3,}|-{3,})\s*$/.test(line)){ html.push("<hr>"); i++; continue; }
+      var q = line.match(/^>\s?(.*)$/);
+      if (q){ var qb=[q[1]]; while (i+1<lines.length && /^>\s?/.test(lines[i+1])){ qb.push(lines[i+1].replace(/^>\s?/,"")); i++; } html.push("<blockquote>"+inline(qb.join("<br>"))+"</blockquote>"); i++; continue; }
+      var olm = line.match(/^\s*\d+\.\s+(.*)$/);
+      if (olm){ var ob=[]; while (i<lines.length && /^\s*\d+\.\s+/.test(lines[i])){ ob.push("<li>"+inline(lines[i].replace(/^\s*\d+\.\s+/,""))+"</li>"); i++; } html.push("<ol>"+ob.join("")+"</ol>"); continue; }
+      var ulm = line.match(/^\s*[-*]\s+(.*)$/);
+      if (ulm){ var ub=[]; while (i<lines.length && /^\s*[-*]\s+/.test(lines[i])){ ub.push("<li>"+inline(lines[i].replace(/^\s*[-*]\s+/,""))+"</li>"); i++; } html.push("<ul>"+ub.join("")+"</ul>"); continue; }
+      var pb=[line]; i++;
+      while (i<lines.length && !/^\s*$/.test(lines[i]) && !/^(#{1,6})\s/.test(lines[i]) && !/^>\s?/.test(lines[i]) && !/^\s*[-*]\s+/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i]) && !/^(\*{3,}|-{3,})\s*$/.test(lines[i]) && !/^@@MDC\d+@@$/.test(lines[i])){ pb.push(lines[i]); i++; }
+      html.push("<p>"+inline(pb.join("<br>"))+"</p>");
+    }
+    return html.join("\n");
+  }
+  function renderNotePreview(){
+    var ta = $("noteContent"); if (!ta) return;
+    var pv = $("notePreview"); if (pv) pv.innerHTML = mdToHtml(ta.value);
   }
   function openNoteModal(id){
     if (MODE !== "server"){ toast("笔记需连接服务端"); return; }
@@ -668,6 +792,9 @@
       document.querySelector('input[name="noteVis"][value="public"]').checked = true;
       $("noteContent").value="";
     }
+    var nsp = $("noteSplit"); if (nsp) nsp.className = "md-split";
+    var nvm = $("noteViewMode"); if (nvm) nvm.querySelectorAll("button").forEach(function(x){ x.classList.toggle("active", x.getAttribute("data-vm")==="split"); });
+    renderNotePreview();
     $("noteModal").classList.add("open");
     setTimeout(function(){ $("noteTitle").focus(); }, 50);
   }
@@ -1136,10 +1263,118 @@
     var rest = line.slice(m[1].length).replace(/^[\s:：、,，\-–—]*|[\-–—]\s*$/g, "").trim();
     return { date: fmtYMD(dt), rest: rest };
   }
-  function parsePasted(text){
-    var lines = (text||"").replace(/\r\n/g, "\n").split("\n");
-    var items = [], cur = null;
-    function pushCur(){ if (cur && cur.points.length) items.push(cur); cur = null; }
+  /* ---------- 解析能力：文本 / 表格 / JSON ---------- */
+  function normalizeDateField(v){
+    if (v == null) return null;
+    if (typeof v === "number"){
+      if (v > 20000 && v < 60000){ var d = new Date((v - 25569) * 86400000); return fmtYMD({ y:d.getFullYear(), m:d.getMonth()+1, d:d.getDate() }); }
+      if (v > 1e12){ var d2 = new Date(v); return fmtYMD({ y:d2.getFullYear(), m:d2.getMonth()+1, d:d2.getDate() }); }
+      return null;
+    }
+    var s = String(v).trim().split("T")[0];
+    var dt = parseDateToken(s) || parseDateToken(s.replace(/^\d{4}年/, ""));
+    return dt ? fmtYMD(dt) : null;
+  }
+  function pushItem(items, byKey, date, slot, points){
+    if (!points || !points.length) return;
+    var key = date + "|" + slot;
+    if (byKey[key]){ points.forEach(function(p){ if (byKey[key].points.indexOf(p) < 0) byKey[key].points.push(p); }); }
+    else { var it = { date:date, slot:slot, points:points.slice() }; byKey[key] = it; items.push(it); }
+  }
+  function mergeItems(items){
+    var map = {}, merged = [];
+    items.forEach(function(it){
+      if (!it.points || !it.points.length) return;
+      var key = it.date + "|" + it.slot;
+      if (map[key]){ it.points.forEach(function(p){ if (map[key].points.indexOf(p) < 0) map[key].points.push(p); }); }
+      else { map[key] = it; merged.push(it); }
+    });
+    return merged;
+  }
+  function tryParseJson(text){
+    var s = (text||"").trim();
+    if (!(/^\[/.test(s) || /^\{/.test(s))) return null;
+    var data; try { data = JSON.parse(s); } catch(e){ return null; }
+    var arr = Array.isArray(data) ? data : (data && Array.isArray(data.reports) ? data.reports :
+                (data && Array.isArray(data.data) ? data.data : (data && Array.isArray(data.list) ? data.list : null)));
+    if (!arr) return null;
+    var items = [], byKey = {}, any = false, slotMap = { morning:"上午", afternoon:"下午", full:"全天" };
+    arr.forEach(function(o){
+      if (!o || typeof o !== "object") return;
+      var date = normalizeDateField(o.date != null ? o.date : (o["日期"] != null ? o["日期"] : (o.day != null ? o.day : o["时间"])));
+      if (!date) return;
+      ["morning","afternoon","full"].forEach(function(sl){
+        var v = o[sl] != null ? o[sl] : o[slotMap[sl]];
+        if (v != null){ var a = Array.isArray(v) ? v : String(v).split(/[\n;；]/); a.forEach(function(x){ var t = String(x).trim(); if (t){ pushItem(items, byKey, date, sl, [t]); any = true; } }); }
+      });
+      ["content","事项","工作","text"].forEach(function(k){
+        if (o[k] != null){ String(o[k]).split(/[\n;；]/).forEach(function(x){ var t = x.trim(); if (t){ pushItem(items, byKey, date, "full", [t]); any = true; } }); }
+      });
+      if (Array.isArray(o.points)){ o.points.forEach(function(p){ if (typeof p === "string"){ pushItem(items, byKey, date, "full", [p]); any = true; } else if (p && p.text){ pushItem(items, byKey, date, p.slot || "full", [String(p.text)]); any = true; } }); }
+    });
+    return any ? mergeItems(items) : null;
+  }
+  function splitDelimited(line, delim){
+    if (delim === "|"){ line = line.replace(/^\s*\|/, "").replace(/\|\s*$/, ""); }
+    return line.split(delim).map(function(c){ return c.trim(); });
+  }
+  function detectTableDelim(lines){
+    var pipe = lines.filter(function(l){ return l.indexOf("|") >= 0; }).length;
+    if (pipe >= 2 && lines.some(function(l){ return /^[\s|:\-]+$/.test(l) && l.indexOf("-") >= 0; })) return "|";
+    var tab = lines.filter(function(l){ return l.indexOf("\t") >= 0; }).length;
+    if (tab >= 2) return "\t";
+    return null;
+  }
+  function parseTable(lines, delim){
+    var rows = lines.map(function(l){ return splitDelimited(l, delim); }).filter(function(r){ return r.some(function(c){ return c !== ""; }); });
+    if (delim === "|"){ rows = rows.filter(function(r){ return !(r.length && r.every(function(c){ return /^[:\-]+$/.test(c); })); }); }
+    if (rows.length < 1) return null;
+    var header = null, hasHeader = false, dataRows = null;
+    if (delim === "|"){
+      var sepIdx = rows.findIndex(function(r){ return r.length && r.every(function(c){ return /^[:\-]+$/.test(c); }); });
+      if (sepIdx >= 0){ hasHeader = sepIdx > 0; header = hasHeader ? rows[sepIdx-1] : null; dataRows = rows.slice(sepIdx+1); }
+    }
+    if (!hasHeader && /日期|date|时间|上午|下午|全天|内容|事项|工作|任务|morning|afternoon/i.test(rows[0].join(" "))){ header = rows[0]; hasHeader = true; dataRows = rows.slice(1); }
+    if (!hasHeader) dataRows = rows;
+    if (!dataRows || !dataRows.length) return null;
+    var colCount = Math.max.apply(null, rows.map(function(r){ return r.length; }));
+    var dateCol = -1;
+    for (var c=0;c<colCount;c++){ var probe = hasHeader ? (dataRows[0][c]||"") : (rows[0][c]||""); if (parseDateToken(probe)){ dateCol = c; break; } }
+    if (dateCol < 0) return null;
+    var items = [], byKey = {};
+    if (!hasHeader){
+      dataRows.forEach(function(r){
+        var dt = parseDateToken(r[dateCol]||""); if (!dt) return;
+        var d = fmtYMD(dt);
+        var others = r.slice(0, dateCol).concat(r.slice(dateCol+1)).filter(Boolean);
+        if (others.length === 1) pushItem(items, byKey, d, "full", others);
+        else if (others.length >= 2 && r.length >= 3){ pushItem(items, byKey, d, "morning", [others[0]]); pushItem(items, byKey, d, "afternoon", [others[1]]); for (var k=2;k<others.length;k++) pushItem(items, byKey, d, "full", [others[k]]); }
+        else if (others.length >= 2) pushItem(items, byKey, d, "full", others);
+      });
+      return mergeItems(items);
+    }
+    var slotCols = [];
+    header.forEach(function(h, c){
+      if (c === dateCol) return;
+      var sl = "content";
+      if (/上午|早上|am|morning/i.test(h)) sl = "morning";
+      else if (/下午|晚上|傍晚|pm|evening/i.test(h)) sl = "afternoon";
+      else if (/全天|一天|full/i.test(h)) sl = "full";
+      slotCols.push({ col:c, slot:sl });
+    });
+    dataRows.forEach(function(r){
+      var dt = parseDateToken(r[dateCol]||""); if (!dt) return;
+      var date = fmtYMD(dt);
+      slotCols.forEach(function(sc){
+        var cell = (r[sc.col]||"").trim(); if (!cell) return;
+        cell.split(/[\n;；]/).map(function(x){ return x.trim(); }).filter(Boolean).forEach(function(p){ pushItem(items, byKey, date, sc.slot === "content" ? "full" : sc.slot, [p]); });
+      });
+    });
+    return mergeItems(items);
+  }
+  function parsePlain(lines){
+    var items = [], cur = null, byKey = {};
+    function pushCur(){ if (cur && cur.points.length) pushItem(items, byKey, cur.date, cur.slot, cur.points); cur = null; }
     for (var i=0;i<lines.length;i++){
       var line = lines[i].trim();
       if (!line) continue;
@@ -1161,7 +1396,7 @@
         if (d){
           pushCur();
           var c2 = parts.slice(1).join(parts.length > 2 ? "," : "").trim().replace(/^[\-\*\•·]\s*/, "");
-          if (c2) items.push({ date: fmtYMD(d), slot: detectSlot(c2), points: [c2] });
+          if (c2) pushItem(items, byKey, fmtYMD(d), detectSlot(c2), [c2]);
           continue;
         }
       }
@@ -1170,14 +1405,16 @@
       if (cur && line) cur.points.push(line);
     }
     pushCur();
-    var map = {}, merged = [];
-    items.forEach(function(it){
-      if (!it.points.length) return;
-      var key = it.date + "|" + it.slot;
-      if (map[key]){ it.points.forEach(function(p){ if (map[key].points.indexOf(p) < 0) map[key].points.push(p); }); }
-      else { map[key] = it; merged.push(it); }
-    });
-    return merged;
+    return mergeItems(items);
+  }
+  function parsePasted(text){
+    text = (text||"").replace(/\r\n/g, "\n");
+    var json = tryParseJson(text);
+    if (json && json.length) return json;
+    var lines = text.split("\n").map(function(l){ return l.replace(/\s+$/, ""); });
+    var delim = detectTableDelim(lines);
+    if (delim){ var t = parseTable(lines, delim); if (t && t.length) return t; }
+    return parsePlain(lines);
   }
   function renderPastePreview(items){
     pasteItems = items;
@@ -1250,12 +1487,13 @@
         if (confirm("确定删除这条日报？")){ apiDelete(id).then(function(){ reload(); toast("已删除"); }).catch(function(){ toast("删除失败"); }); } return; }
     };
 
-    /* 应用中心：点击图标进入对应应用 */
+    /* 应用中心：点击图标进入对应应用（入口由后端按用户权限下发） */
     $("appGrid").onclick = function(e){
       var card = e.target.closest(".app-card"); if (!card) return;
-      var app = card.getAttribute("data-app");
-      if (app === "report") showReport("list");
-      else if (app === "blog") showBlog();
+      var entry = card.getAttribute("data-entry") || card.getAttribute("data-app");
+      if (entry === "report") showReport("list");
+      else if (entry === "blog") showBlog();
+      else if (entry) location.href = entry;
     };
 
     $("btnExportJson").onclick = exportJSON;
@@ -1264,12 +1502,28 @@
     $("fileInput").onchange = function(e){ if (e.target.files[0]) importJSON(e.target.files[0]); e.target.value=""; };
 
     /* 智能粘贴导入 */
+    var pasteTA = $("pasteInput");
+    function autoParsePaste(){ var t = pasteTA.value; renderPastePreview(t.trim() ? parsePasted(t) : []); }
+    pasteTA.addEventListener("input", function(){ clearTimeout(pasteTA._t); pasteTA._t = setTimeout(autoParsePaste, 150); });
+    pasteTA.addEventListener("paste", function(){ setTimeout(autoParsePaste, 0); });
     $("btnPasteImport").onclick = function(){ if (MODE==="server" && !USER){ pendingAuthAction = function(){ openPasteModal(); }; showAuth(); toast("导入日报请先登录"); return; } openPasteModal(); };
     $("pasteClose").onclick = function(){ $("pasteModal").classList.remove("open"); };
     $("pasteCancel").onclick = function(){ $("pasteModal").classList.remove("open"); };
     $("pasteModal").onclick = function(e){ if (e.target === $("pasteModal")) $("pasteModal").classList.remove("open"); };
-    $("pasteParse").onclick = function(){ var t=$("pasteInput").value; if(!t.trim()){ toast("请先粘贴内容"); return; } renderPastePreview(parsePasted(t)); };
+    $("pasteParse").onclick = autoParsePaste;
+    $("pasteParse").textContent = "重新解析";
     $("pasteConfirm").onclick = importPaste;
+    /* 全局粘贴：在日报/应用中心界面直接 Ctrl+V 含日期的内容，自动弹出并解析 */
+    document.addEventListener("paste", function(e){
+      if (e.target && (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.isContentEditable)) return;
+      if (screen !== "report" && screen !== "center") return;
+      var data = e.clipboardData ? e.clipboardData.getData("text/plain") : "";
+      if (!data || !/(20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})|(\d{1,2}月\d{1,2}[日号]?)|(今天|昨天|前天)/.test(data)) return;
+      if (MODE === "server" && !USER){ pendingAuthAction = function(){ openPasteModal(); pasteTA.value = data; autoParsePaste(); }; showAuth(); toast("导入日报请先登录"); return; }
+      if (e.cancelable) e.preventDefault();
+      openPasteModal(); pasteTA.value = data; autoParsePaste();
+      toast("已识别到日期内容，自动解析预览");
+    });
     $("pastePreview").onchange = function(e){ if (e.target.classList.contains("pp-slot")){ var i=+e.target.getAttribute("data-i"); if (pasteItems[i]) pasteItems[i].slot = e.target.value; } };
 
     $("btnTheme").onclick = function(){
@@ -1328,6 +1582,7 @@
     });
     $("btnLogout").onclick = logout;
     $("btnLogin").onclick = function(){ showAuth(); };
+    $("btnSettings").onclick = function(){ location.href = "settings.html"; };
 
     /* 笔记卡片点击在 noteList 中处理；应用中心图标点击见上方 */
 
@@ -1359,13 +1614,32 @@
     document.querySelectorAll(".md-tools button").forEach(function(btn){
       btn.onclick = function(){
         var k = btn.getAttribute("data-md");
-        if (k==="h") mdLine("# ");
+        if (k==="h1") mdLine("# ");
+        else if (k==="h2") mdLine("## ");
+        else if (k==="h3") mdLine("### ");
         else if (k==="b") mdWrap("**","**","加粗文字");
+        else if (k==="i") mdWrap("*","*","斜体");
         else if (k==="code") mdWrap("`","`","代码");
         else if (k==="list") mdLine("- ");
         else if (k==="quote") mdLine("> ");
+        else if (k==="link") mdWrap("[","](https://)","链接文字");
+        else if (k==="img") mdWrap("![","](https://)","图片描述");
+        else if (k==="hr") mdLine("\n---\n");
+        renderNotePreview();
       };
     });
+    /* 分屏 / 编辑 / 预览 切换 + 实时预览 */
+    var noteTA = $("noteContent");
+    if (noteTA){ noteTA.addEventListener("input", function(){ clearTimeout(noteTA._pt); noteTA._pt = setTimeout(renderNotePreview, 120); }); }
+    var vmWrap = $("noteViewMode");
+    if (vmWrap){ vmWrap.querySelectorAll("button").forEach(function(b){
+      b.onclick = function(){
+        vmWrap.querySelectorAll("button").forEach(function(x){ x.classList.remove("active"); });
+        b.classList.add("active");
+        var vm = b.getAttribute("data-vm");
+        var sp = $("noteSplit"); if (sp) sp.className = "md-split" + (vm==="edit" ? " only-edit" : vm==="preview" ? " only-preview" : "");
+      };
+    }); }
   }
   function fallbackCopy(){
     var ta=document.createElement("textarea"); ta.value=state.weekMarkdown; document.body.appendChild(ta); ta.select();

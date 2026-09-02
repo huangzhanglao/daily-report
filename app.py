@@ -77,8 +77,71 @@ def init_db():
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS finance_items (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                date_key TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                cat TEXT NOT NULL DEFAULT '',
+                pri TEXT NOT NULL DEFAULT '中',
+                done INTEGER NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT '',
+                owner TEXT NOT NULL DEFAULT '',
+                time TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS finance_meta (
+                user_id TEXT PRIMARY KEY,
+                initialized INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS tax_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                company TEXT NOT NULL DEFAULT '',
+                tax_item TEXT NOT NULL DEFAULT '',
+                status TEXT NOT NULL DEFAULT '未处理',
+                deadline TEXT NOT NULL DEFAULT '',
+                month TEXT NOT NULL DEFAULT '',
+                note TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS app_catalog (
+                id TEXT PRIMARY KEY,
+                key TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                icon TEXT NOT NULL DEFAULT '',
+                desc TEXT NOT NULL DEFAULT '',
+                entry TEXT NOT NULL DEFAULT '',
+                color TEXT NOT NULL DEFAULT '',
+                sort INTEGER NOT NULL DEFAULT 0,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                intro TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS user_app_perm (
+                user_id TEXT NOT NULL,
+                app_key TEXT NOT NULL,
+                granted INTEGER NOT NULL DEFAULT 1,
+                PRIMARY KEY (user_id, app_key)
+            );
+            CREATE TABLE IF NOT EXISTS settings_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL DEFAULT ''
+            );
             """
         )
+        # 兼容旧库：补充 users 表可能缺失的列
+        for col, ddl in [
+            ("role", "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'"),
+            ("display_name", "ALTER TABLE users ADD COLUMN display_name TEXT NOT NULL DEFAULT ''"),
+        ]:
+            try:
+                conn.execute(ddl)
+            except Exception:
+                pass
         conn.commit()
     finally:
         conn.close()
@@ -159,6 +222,107 @@ def migrate_from_json():
     print(f"[migrate] 完成：{len(users)} 用户 / {len(reports)} 日报 / {len(blogs)} 笔记")
 
 
+# ---------------- 应用目录 / 权限 / 设置 种子与辅助 ----------------
+DEFAULT_APPS = [
+    {"key": "report", "name": "日报工作台", "icon": "📋",
+     "desc": "记录每日上午 / 下午的工作，按点汇总，一键生成可汇报给领导的周报长图。",
+     "entry": "report", "color": "linear-gradient(135deg,#3b6cff,#7aa0ff)", "sort": 1},
+    {"key": "blog", "name": "博客系统", "icon": "📚",
+     "desc": "对标 CSDN 写笔记、发文章。支持私有 / 公开，公开内容可在首页广场展示。",
+     "entry": "blog", "color": "linear-gradient(135deg,#11b886,#37d6a4)", "sort": 2},
+    {"key": "finance", "name": "财务工作台", "icon": "💰",
+     "desc": "一整年 · 12 个月财务日历：报税 / 结账 / 报表排期、农历节假日、提醒与多端导出。数据按账号隔离存档。",
+     "entry": "finance.html", "color": "linear-gradient(135deg,#f59e0b,#fbbf24)", "sort": 3},
+    {"key": "tax", "name": "报税工作台", "icon": "🧾",
+     "desc": "多公司申报事项一屏掌握：按征期日历自动算截止日、完成率进度环、按公司 / 按税种总览、顺延申报。数据按账号隔离存档。",
+     "entry": "tax.html", "color": "linear-gradient(135deg,#6366f1,#8b5cf6)", "sort": 4},
+]
+
+DEFAULT_SETTINGS = {
+    "home_intro": "选择你要进入的应用。所有数据按账号隔离存储，安全可追溯。",
+    "app_center_title": "🧭 应用中心",
+    "guide": (
+        "【应用中心 · 操作说明】\n\n"
+        "1. 应用中心是统一入口，所有应用的数据均按登录账号隔离，互不干扰。\n"
+        "2. 管理员可在「设置」中管理：\n"
+        "   · 应用管理：维护可上架的应用（名称、图标、入口、简介、配色、是否启用、排序）。\n"
+        "   · 权限管理：为每位用户勾选可使用的应用，实现「每个用户拥有独立的应用集合」。\n"
+        "   · 用户管理：创建 / 编辑 / 停用账号，分配管理员角色。\n"
+        "   · 操作说明：本说明与首页简介均可编辑。\n"
+        "3. 普通用户登录后只看到被授权的应用；未授权应用不会出现在他的应用中心。\n"
+        "4. 首页简介展示在应用中心顶部，管理员可在「设置 → 操作说明」中修改。"
+    ),
+}
+
+
+def grant_all_apps(uid: str):
+    """给某个用户授予当前所有已启用的应用。"""
+    conn = get_conn()
+    try:
+        apps = conn.execute("SELECT key FROM app_catalog WHERE enabled=1").fetchall()
+        for a in apps:
+            conn.execute(
+                "INSERT OR IGNORE INTO user_app_perm (user_id, app_key, granted) VALUES (?,?,1)",
+                (uid, a["key"]),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def grant_app_to_all_users(app_key: str):
+    """把某个应用授予所有用户。"""
+    conn = get_conn()
+    try:
+        users = conn.execute("SELECT id FROM users").fetchall()
+        for u in users:
+            conn.execute(
+                "INSERT OR IGNORE INTO user_app_perm (user_id, app_key, granted) VALUES (?,?,1)",
+                (u["id"], app_key),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def seed_app_catalog():
+    conn = get_conn()
+    try:
+        now = int(time.time() * 1000)
+        cnt = conn.execute("SELECT COUNT(*) AS c FROM app_catalog").fetchone()["c"]
+        if cnt == 0:
+            for app in DEFAULT_APPS:
+                conn.execute(
+                    "INSERT INTO app_catalog (id,key,name,icon,desc,entry,color,sort,enabled,intro,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,1,'',?,?)",
+                    (uid_now(), app["key"], app["name"], app["icon"], app["desc"],
+                     app["entry"], app["color"], app["sort"], now, now),
+                )
+            conn.commit()
+        # 保证每位用户对每个已启用应用都有一条授权记录（默认授予，管理员可收回）
+        apps = conn.execute("SELECT key FROM app_catalog WHERE enabled=1").fetchall()
+        users = conn.execute("SELECT id FROM users").fetchall()
+        for u in users:
+            for a in apps:
+                conn.execute(
+                    "INSERT OR IGNORE INTO user_app_perm (user_id, app_key, granted) VALUES (?,?,1)",
+                    (u["id"], a["key"]),
+                )
+        # 至少保证存在一个管理员：优先 username='admin'，否则最早注册的用户
+        admin_exists = conn.execute("SELECT COUNT(*) AS c FROM users WHERE role='admin'").fetchone()["c"]
+        if admin_exists == 0:
+            adm = conn.execute("SELECT id FROM users WHERE username='admin'").fetchone()
+            if not adm:
+                adm = conn.execute("SELECT id FROM users ORDER BY created_at ASC LIMIT 1").fetchone()
+            if adm:
+                conn.execute("UPDATE users SET role='admin' WHERE id=?", (adm["id"],))
+        # 设置项默认值
+        for k, v in DEFAULT_SETTINGS.items():
+            conn.execute("INSERT OR IGNORE INTO settings_meta (key, value) VALUES (?,?)", (k, v))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 init_db()
 migrate_from_json()
 
@@ -232,12 +396,36 @@ def require_uid(authorization: str = Header(default="")) -> str:
     return uid
 
 
+def require_admin(authorization: str = Header(default="")) -> str:
+    uid = get_uid(authorization)
+    if not uid:
+        raise HTTPException(401, "未登录")
+    conn = get_conn()
+    try:
+        u = conn.execute("SELECT role FROM users WHERE id=?", (uid,)).fetchone()
+    finally:
+        conn.close()
+    if not u or u["role"] != "admin":
+        raise HTTPException(403, "需要管理员权限")
+    return uid
+
+
 def uid_now() -> str:
     return base64.urlsafe_b64encode(os.urandom(9)).rstrip(b"=").decode("ascii") + secrets.token_hex(3)
 
 
+# 应用目录 / 权限 / 设置 种子（依赖 uid_now，故放在其定义之后）
+seed_app_catalog()
+
+
+
 def row_to_user(r) -> dict:
-    return {"id": r["id"], "username": r["username"]}
+    return {
+        "id": r["id"],
+        "username": r["username"],
+        "role": r["role"] if "role" in r.keys() else "user",
+        "displayName": r["display_name"] if "display_name" in r.keys() else "",
+    }
 
 
 def blog_public(b) -> dict:
@@ -511,6 +699,410 @@ def delete_blog(bid: str, uid: str = Depends(require_uid)):
         conn.commit()
     finally:
         conn.close()
+    return {"ok": True}
+
+
+# ---------------- 财务工作台（按用户隔离：每个登录账号独立数据） ----------------
+@app.get("/api/finance/items")
+def list_finance(uid: str = Depends(require_uid)):
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM finance_items WHERE user_id=?", (uid,)).fetchall()
+        meta = conn.execute("SELECT initialized FROM finance_meta WHERE user_id=?", (uid,)).fetchone()
+    finally:
+        conn.close()
+    items = {}
+    for r in rows:
+        dk = r["date_key"]
+        items.setdefault(dk, []).append({
+            "id": r["id"], "title": r["title"], "cat": r["cat"], "pri": r["pri"],
+            "done": bool(r["done"]), "note": r["note"], "owner": r["owner"], "time": r["time"],
+        })
+    return {"items": items, "initialized": bool(meta["initialized"]) if meta else False}
+
+
+@app.put("/api/finance/items")
+async def put_finance(body: dict, uid: str = Depends(require_uid)):
+    raw = body if isinstance(body, dict) else {}
+    items = raw.get("items") if isinstance(raw, dict) and "items" in raw else raw
+    if not isinstance(items, dict):
+        items = {}
+    now = int(time.time() * 1000)
+    with write_lock:
+        conn = get_conn()
+        try:
+            conn.execute("DELETE FROM finance_items WHERE user_id=?", (uid,))
+            for dk, arr in items.items():
+                if not isinstance(arr, list):
+                    continue
+                for it in arr:
+                    if not isinstance(it, dict):
+                        continue
+                    iid = it.get("id") or uid_now()
+                    conn.execute(
+                        "INSERT INTO finance_items (id,user_id,date_key,title,cat,pri,done,note,owner,time,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (iid, uid, str(dk), (it.get("title") or ""), (it.get("cat") or ""),
+                         (it.get("pri") or "中"), 1 if it.get("done") else 0, (it.get("note") or ""),
+                         (it.get("owner") or ""), (it.get("time") or ""), now, now),
+                    )
+            conn.execute("INSERT OR REPLACE INTO finance_meta (user_id, initialized) VALUES (?,1)", (uid,))
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
+# ---------------- 报税工作台（按用户隔离：每个登录账号独立数据） ----------------
+# 数据字段沿用参考应用：公司名称 / 税种事项 / 状态 / 截止日期 / 所属月份 / 备注
+@app.get("/api/tax/items")
+def list_tax(uid: str = Depends(require_uid)):
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT id,company,tax_item,status,deadline,month,note FROM tax_items WHERE user_id=? ORDER BY deadline ASC",
+            (uid,),
+        ).fetchall()
+    finally:
+        conn.close()
+    items = [
+        {
+            "_id": r["id"],
+            "公司名称": r["company"],
+            "税种事项": r["tax_item"],
+            "状态": r["status"],
+            "截止日期": r["deadline"],
+            "所属月份": r["month"],
+            "备注": r["note"],
+        }
+        for r in rows
+    ]
+    return {"items": items}
+
+
+@app.post("/api/tax/items")
+async def create_tax(body: dict, uid: str = Depends(require_uid)):
+    b = body if isinstance(body, dict) else {}
+    company = (b.get("company") or "").strip()
+    tax_item = (b.get("tax_item") or "").strip()
+    if not company or not tax_item:
+        return JSONResponse(status_code=400, content={"error": "公司名称与税种事项必填"})
+    now = int(time.time() * 1000)
+    with write_lock:
+        conn = get_conn()
+        try:
+            cur = conn.execute(
+                "INSERT INTO tax_items (user_id,company,tax_item,status,deadline,month,note,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (uid, company, tax_item, (b.get("status") or "未处理"), (b.get("deadline") or ""),
+                 (b.get("month") or ""), (b.get("note") or ""), now, now),
+            )
+            iid = cur.lastrowid
+            conn.commit()
+        finally:
+            conn.close()
+    return {"_id": iid, "公司名称": company, "税种事项": tax_item, "状态": b.get("status") or "未处理",
+            "截止日期": b.get("deadline") or "", "所属月份": b.get("month") or "", "备注": b.get("note") or ""}
+
+
+@app.put("/api/tax/items/{item_id}")
+async def update_tax(item_id: int, body: dict, uid: str = Depends(require_uid)):
+    b = body if isinstance(body, dict) else {}
+    with write_lock:
+        conn = get_conn()
+        try:
+            exists = conn.execute(
+                "SELECT id FROM tax_items WHERE id=? AND user_id=?", (item_id, uid)
+            ).fetchone()
+            if not exists:
+                return JSONResponse(status_code=404, content={"error": "记录不存在"})
+            conn.execute(
+                "UPDATE tax_items SET company=?,tax_item=?,status=?,deadline=?,month=?,note=?,updated_at=? WHERE id=? AND user_id=?",
+                ((b.get("company") or "").strip(), (b.get("tax_item") or "").strip(), (b.get("status") or "未处理"),
+                 (b.get("deadline") or ""), (b.get("month") or ""), (b.get("note") or ""),
+                 int(time.time() * 1000), item_id, uid),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
+@app.delete("/api/tax/items/{item_id}")
+def delete_tax(item_id: int, uid: str = Depends(require_uid)):
+    with write_lock:
+        conn = get_conn()
+        try:
+            cur = conn.execute("DELETE FROM tax_items WHERE id=? AND user_id=?", (item_id, uid))
+            conn.commit()
+            if cur.rowcount == 0:
+                return JSONResponse(status_code=404, content={"error": "记录不存在或无权删除"})
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
+# ---------------- 应用中心 / 设置 / 管理后台 API ----------------
+def app_row_to_dict(r):
+    return {
+        "key": r["key"], "name": r["name"], "icon": r["icon"], "desc": r["desc"],
+        "entry": r["entry"], "color": r["color"], "enabled": bool(r["enabled"]),
+        "intro": r["intro"], "sort": r["sort"],
+    }
+
+
+@app.get("/api/apps")
+def list_visible_apps(authorization: str = Header(default="")):
+    """当前用户可见的应用。已登录按权限过滤（未显式收回的已启用应用均可见）；匿名返回全部已启用应用（预览）。"""
+    uid = get_uid(authorization)
+    conn = get_conn()
+    try:
+        if uid:
+            rows = conn.execute(
+                "SELECT c.* FROM app_catalog c LEFT JOIN user_app_perm p ON p.app_key=c.key AND p.user_id=? "
+                "WHERE c.enabled=1 AND (p.granted IS NULL OR p.granted=1) ORDER BY c.sort ASC, c.name ASC",
+                (uid,),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM app_catalog WHERE enabled=1 ORDER BY sort ASC, name ASC"
+            ).fetchall()
+    finally:
+        conn.close()
+    return {"apps": [app_row_to_dict(r) for r in rows]}
+
+
+@app.get("/api/settings")
+def get_settings():
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT key,value FROM settings_meta").fetchall()
+    finally:
+        conn.close()
+    return {"settings": {r["key"]: r["value"] for r in rows}}
+
+
+# ---------- 应用管理 ----------
+@app.get("/api/admin/apps")
+def admin_list_apps(_: str = Depends(require_admin)):
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM app_catalog ORDER BY sort ASC, name ASC").fetchall()
+    finally:
+        conn.close()
+    return {"apps": [app_row_to_dict(r) for r in rows]}
+
+
+@app.post("/api/admin/apps")
+async def admin_create_app(body: dict, _: str = Depends(require_admin)):
+    key = (body.get("key") or "").strip()
+    name = (body.get("name") or "").strip()
+    if not re.match(r"^[a-zA-Z0-9_-]{2,32}$", key):
+        raise HTTPException(400, "应用标识需为 2-32 位字母/数字/下划线/连字符")
+    if not name:
+        raise HTTPException(400, "应用名称必填")
+    conn = get_conn()
+    try:
+        if conn.execute("SELECT 1 FROM app_catalog WHERE key=?", (key,)).fetchone():
+            raise HTTPException(409, "该应用标识已存在")
+        now = int(time.time() * 1000)
+        conn.execute(
+            "INSERT INTO app_catalog (id,key,name,icon,desc,entry,color,sort,enabled,intro,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            (uid_now(), key, name, (body.get("icon") or "").strip(), (body.get("desc") or "").strip(),
+             (body.get("entry") or "").strip(), (body.get("color") or "").strip(), int(body.get("sort", 0) or 0),
+             1 if body.get("enabled", True) else 0, (body.get("intro") or "").strip(), now, now),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    grant_app_to_all_users(key)
+    return {"ok": True, "key": key}
+
+
+@app.put("/api/admin/apps/{key}")
+async def admin_update_app(key: str, body: dict, _: str = Depends(require_admin)):
+    conn = get_conn()
+    try:
+        cur = conn.execute("SELECT * FROM app_catalog WHERE key=?", (key,)).fetchone()
+        if not cur:
+            raise HTTPException(404, "应用不存在")
+        conn.execute(
+            "UPDATE app_catalog SET name=?, icon=?, desc=?, entry=?, color=?, sort=?, enabled=?, intro=?, updated_at=? WHERE key=?",
+            ((body.get("name") or cur["name"]).strip(), body.get("icon", cur["icon"]), body.get("desc", cur["desc"]),
+             body.get("entry", cur["entry"]), body.get("color", cur["color"]), int(body.get("sort", cur["sort"]) or 0),
+             1 if body.get("enabled", cur["enabled"]) else 0, body.get("intro", cur["intro"]), int(time.time() * 1000), key),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
+@app.delete("/api/admin/apps/{key}")
+def admin_delete_app(key: str, _: str = Depends(require_admin)):
+    with write_lock:
+        conn = get_conn()
+        try:
+            conn.execute("DELETE FROM app_catalog WHERE key=?", (key,))
+            conn.execute("DELETE FROM user_app_perm WHERE app_key=?", (key,))
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
+# ---------- 用户管理 ----------
+@app.get("/api/admin/users")
+def admin_list_users(_: str = Depends(require_admin)):
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT id,username,display_name,role,created_at FROM users ORDER BY created_at ASC").fetchall()
+    finally:
+        conn.close()
+    return {"users": [{"id": r["id"], "username": r["username"], "displayName": r["display_name"],
+                       "role": r["role"], "createdAt": r["created_at"]} for r in rows]}
+
+
+@app.post("/api/admin/users")
+async def admin_create_user(body: dict, _: str = Depends(require_admin)):
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    if not (3 <= len(username) <= 20):
+        raise HTTPException(400, "用户名需 3-20 位")
+    if len(password) < 6:
+        raise HTTPException(400, "密码至少 6 位")
+    role = body.get("role") if body.get("role") in ("admin", "user") else "user"
+    display_name = (body.get("displayName") or "").strip()
+    conn = get_conn()
+    try:
+        if conn.execute("SELECT 1 FROM users WHERE username=? COLLATE NOCASE", (username,)).fetchone():
+            raise HTTPException(409, "该用户名已被注册")
+        hp = hash_password(password)
+        u_id = uid_now()
+        now = int(time.time() * 1000)
+        conn.execute(
+            "INSERT INTO users (id,username,salt,hash,created_at,role,display_name) VALUES (?,?,?,?,?,?,?)",
+            (u_id, username, hp["salt"], hp["hash"], now, role, display_name),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    grant_all_apps(u_id)
+    return {"ok": True, "id": u_id}
+
+
+@app.put("/api/admin/users/{uid}")
+async def admin_update_user(uid: str, body: dict, _: str = Depends(require_admin)):
+    with write_lock:
+        conn = get_conn()
+        try:
+            u = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+            if not u:
+                raise HTTPException(404, "用户不存在")
+            role = body.get("role", u["role"])
+            if role not in ("admin", "user"):
+                role = u["role"]
+            display_name = (body.get("displayName") if body.get("displayName") is not None else u["display_name"])
+            pw = body.get("password")
+            if pw:
+                if len(pw) < 6:
+                    raise HTTPException(400, "密码至少 6 位")
+                hp = hash_password(pw)
+                conn.execute(
+                    "UPDATE users SET role=?, display_name=?, salt=?, hash=? WHERE id=?",
+                    (role, display_name, hp["salt"], hp["hash"], uid),
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET role=?, display_name=? WHERE id=?",
+                    (role, display_name, uid),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
+@app.delete("/api/admin/users/{uid}")
+def admin_delete_user(uid: str, _: str = Depends(require_admin)):
+    with write_lock:
+        conn = get_conn()
+        try:
+            u = conn.execute("SELECT role FROM users WHERE id=?", (uid,)).fetchone()
+            if not u:
+                raise HTTPException(404, "用户不存在")
+            if u["role"] == "admin":
+                adm = conn.execute("SELECT COUNT(*) AS c FROM users WHERE role='admin'").fetchone()["c"]
+                if adm <= 1:
+                    raise HTTPException(400, "至少保留一个管理员账号")
+            conn.execute("DELETE FROM user_app_perm WHERE user_id=?", (uid,))
+            conn.execute("DELETE FROM reports WHERE user_id=?", (uid,))
+            conn.execute("DELETE FROM blogs WHERE author_id=?", (uid,))
+            conn.execute("DELETE FROM finance_items WHERE user_id=?", (uid,))
+            conn.execute("DELETE FROM finance_meta WHERE user_id=?", (uid,))
+            conn.execute("DELETE FROM tax_items WHERE user_id=?", (uid,))
+            conn.execute("DELETE FROM users WHERE id=?", (uid,))
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
+# ---------- 权限管理（用户 ↔ 应用） ----------
+@app.get("/api/admin/permissions")
+def admin_permissions(_: str = Depends(require_admin)):
+    conn = get_conn()
+    try:
+        users = conn.execute("SELECT id,username,display_name,role FROM users ORDER BY created_at ASC").fetchall()
+        apps = conn.execute("SELECT key,name,icon FROM app_catalog ORDER BY sort ASC, name ASC").fetchall()
+        perms = conn.execute("SELECT user_id,app_key,granted FROM user_app_perm").fetchall()
+    finally:
+        conn.close()
+    grants = {}
+    for p in perms:
+        grants.setdefault(p["user_id"], {})[p["app_key"]] = bool(p["granted"])
+    return {
+        "users": [{"id": u["id"], "username": u["username"], "displayName": u["display_name"], "role": u["role"]} for u in users],
+        "apps": [{"key": a["key"], "name": a["name"], "icon": a["icon"]} for a in apps],
+        "grants": grants,
+    }
+
+
+@app.put("/api/admin/permissions")
+async def admin_set_permission(body: dict, _: str = Depends(require_admin)):
+    user_id = body.get("user_id") or ""
+    app_key = body.get("app_key") or ""
+    granted = bool(body.get("granted", True))
+    if not user_id or not app_key:
+        raise HTTPException(400, "缺少 user_id 或 app_key")
+    with write_lock:
+        conn = get_conn()
+        try:
+            if not conn.execute("SELECT 1 FROM users WHERE id=?", (user_id,)).fetchone():
+                raise HTTPException(404, "用户不存在")
+            if not conn.execute("SELECT 1 FROM app_catalog WHERE key=?", (app_key,)).fetchone():
+                raise HTTPException(404, "应用不存在")
+            conn.execute(
+                "INSERT OR REPLACE INTO user_app_perm (user_id, app_key, granted) VALUES (?,?,?)",
+                (user_id, app_key, 1 if granted else 0),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+
+@app.put("/api/admin/settings")
+async def admin_set_settings(body: dict, _: str = Depends(require_admin)):
+    payload = body.get("settings") if isinstance(body.get("settings"), dict) else body
+    with write_lock:
+        conn = get_conn()
+        try:
+            for k, v in payload.items():
+                if not isinstance(k, str):
+                    continue
+                conn.execute("INSERT OR REPLACE INTO settings_meta (key, value) VALUES (?, ?)", (k, str(v)))
+            conn.commit()
+        finally:
+            conn.close()
     return {"ok": True}
 
 

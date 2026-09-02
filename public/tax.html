@@ -1,0 +1,1995 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+
+<meta charset="UTF-8" />
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport" />
+<meta content="telephone=no" name="format-detection" />
+<title>每月报税进度总览</title>
+
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  :root {
+    --primary: #2563eb;
+    --primary-dark: #1d4ed8;
+    --primary-light: #dbeafe;
+    --danger: #dc2626;
+    --danger-bg: #fef2f2;
+    --warn: #d97706;
+    --warn-bg: #fffbeb;
+    --ok: #16a34a;
+    --ok-bg: #f0fdf4;
+    --text: #1f2937;
+    --text-sub: #6b7280;
+    --border: #e5e7eb;
+    --bg: #f3f5f9;
+    --card: #ffffff;
+  }
+  html { font-size: 16px; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+  .app { max-width: 1080px; margin: 0 auto; padding: 16px; }
+
+  /* ===== 头部 ===== */
+  .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-icon { width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, var(--primary), #3b82f6); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .brand-icon svg { width: 22px; height: 22px; }
+  .brand h1 { font-size: 1.15rem; font-weight: 700; }
+  .brand .sub { font-size: .75rem; color: var(--text-sub); }
+  .sync-badge { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; color: var(--text-sub); background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 5px 12px; }
+  .sync-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex-shrink: 0; }
+  .sync-dot.off { background: #9ca3af; }
+  .sync-dot.busy { background: var(--warn); }
+
+  /* ===== 预览 / 编辑模式切换 ===== */
+  body.preview .write-only { display: none !important; }
+  .top-actions { display: inline-flex; align-items: center; gap: 10px; flex-shrink: 0; flex-wrap: wrap; }
+  .mode-switch { display: inline-flex; background: var(--bg); border: 1px solid var(--border); border-radius: 11px; padding: 3px; }
+  .mode-btn { height: 32px; padding: 0 12px; border-radius: 9px; border: none; background: transparent; color: var(--text-sub); font-size: .82rem; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 5px; }
+  .mode-btn svg { width: 14px; height: 14px; }
+  .mode-btn.active { background: var(--card); color: var(--primary); font-weight: 600; box-shadow: 0 1px 3px rgba(15, 23, 42, .1); }
+  .mode-btn.active.edit { background: var(--primary); color: #fff; box-shadow: none; }
+  .mode-banner { display: none; align-items: center; gap: 7px; background: var(--primary-light); color: var(--primary); border: 1px solid #bfdbfe; border-radius: 10px; padding: 9px 13px; font-size: .83rem; margin-bottom: 14px; }
+  .mode-banner svg { width: 15px; height: 15px; flex-shrink: 0; }
+  body.preview .mode-banner { display: flex; }
+  @media (max-width: 768px) {
+    .top-actions { width: 100%; justify-content: space-between; }
+    .brand { flex: 1; min-width: 0; }
+  }
+
+  .offline-bar { display: none; background: var(--warn-bg); border: 1px solid #fde68a; color: #92400e; border-radius: 10px; padding: 10px 14px; font-size: .85rem; margin-bottom: 14px; }
+  .offline-bar.show { display: block; }
+
+  /* ===== 访问密码门 ===== */
+  .gate { position: fixed; inset: 0; z-index: 9999; background: linear-gradient(135deg, #eef2ff, #f8fafc); display: flex; align-items: center; justify-content: center; padding: 20px; }
+  .gate.hide { display: none; }
+  .gate-box { width: 100%; max-width: 320px; background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px 24px 22px; box-shadow: 0 10px 30px rgba(15, 23, 42, .08); text-align: center; }
+  .gate-logo { width: 48px; height: 48px; margin: 0 auto 14px; border-radius: 12px; background: var(--primary-light); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+  .gate-logo svg { width: 24px; height: 24px; }
+  .gate-title { font-size: 1.1rem; font-weight: 700; }
+  .gate-sub { font-size: .85rem; color: var(--text-sub); margin: 6px 0 16px; }
+  .gate-input { width: 100%; height: 44px; border-radius: 10px; border: 1px solid var(--border); background: #fff; padding: 0 14px; font-size: 1rem; font-family: inherit; color: var(--text); box-sizing: border-box; }
+  .gate-input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+  .gate-btn { width: 100%; height: 46px; border-radius: 11px; border: none; background: var(--primary); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; font-family: inherit; margin-top: 12px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .gate-btn:hover { background: var(--primary-dark); }
+  .gate-err { color: var(--danger); font-size: .82rem; min-height: 18px; margin-top: 10px; }
+  .gate-tip { font-size: .72rem; color: #b0b6c0; margin-top: 14px; }
+
+  /* ===== 卡片通用 ===== */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(15, 23, 42, .04); }
+  .card-title { display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: 700; margin-bottom: 14px; }
+  .card-title svg { width: 18px; height: 18px; color: var(--primary); flex-shrink: 0; }
+  .card-title .count { background: var(--danger); color: #fff; font-size: .72rem; font-weight: 600; border-radius: 999px; min-width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; padding: 0 6px; }
+  .card-title .count.zero { background: #9ca3af; }
+  .collapse-btn { height: 34px; border-radius: 8px; border: 1px solid var(--border); background: var(--card); color: var(--text-sub); font-size: .8rem; font-weight: 500; cursor: pointer; padding: 0 10px; font-family: inherit; display: inline-flex; align-items: center; gap: 5px; transition: background .15s ease, border-color .15s ease; }
+  .collapse-btn:hover { background: var(--bg); color: var(--text); border-color: #cbd5e1; }
+  .collapse-btn .chevron { width: 14px; height: 14px; transition: transform .25s ease; }
+  .collapse-btn.collapsed .chevron { transform: rotate(180deg); }
+  .card.collapsed #todayList { display: none; }
+  .collapse-btn span { pointer-events: none; }
+
+  /* ===== 统计区 ===== */
+  .stat-wrap { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+  .ring-box { position: relative; width: 132px; height: 132px; flex-shrink: 0; }
+  .ring-box svg { width: 100%; height: 100%; display: block; }
+  .ring-track { fill: none; stroke: #e8ecf3; stroke-width: 11; }
+  .ring-bar { fill: none; stroke: var(--primary); stroke-width: 11; stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
+  .ring-pct { font-size: 1.35rem; font-weight: 700; fill: var(--text); }
+  .ring-label { font-size: .68rem; fill: var(--text-sub); }
+  .stat-grid { flex: 1; min-width: 240px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .stat-item { background: var(--bg); border-radius: 10px; padding: 10px 14px; transition: background .15s, box-shadow .15s; }
+  .stat-item.stat-filter { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .stat-item.stat-filter:hover { background: #f1f5f9; }
+  .stat-item.stat-filter.active { background: #fff; }
+  .stat-item.stat-filter.ok.active { box-shadow: 0 0 0 2px var(--ok); }
+  .stat-item.stat-filter.warn.active { box-shadow: 0 0 0 2px var(--warn); }
+  .stat-item.stat-filter.danger.active { box-shadow: 0 0 0 2px var(--danger); }
+  .stat-item .num { font-size: 1.3rem; font-weight: 700; }
+  .stat-item .lbl { font-size: .75rem; color: var(--text-sub); }
+  .stat-item.danger .num { color: var(--danger); }
+  .stat-item.ok .num { color: var(--ok); }
+  .stat-item.warn .num { color: var(--warn); }
+  .month-bar { display: flex; align-items: center; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .month-bar .lbl { font-size: .85rem; color: var(--text-sub); display: inline-flex; align-items: center; gap: 5px; }
+  .month-bar .lbl svg { width: 15px; height: 15px; }
+  .month-nav { display: flex; align-items: center; gap: 6px; }
+  .btn-icon { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--text); }
+  .btn-icon:active { background: var(--bg); }
+  .btn-icon svg { width: 17px; height: 17px; }
+  .month-select { height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); padding: 0 10px; font-size: 1rem; font-family: inherit; color: var(--text); min-width: 130px; }
+
+  /* ===== 今天要处理 ===== */
+  .today-item { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 10px; margin-bottom: 8px; border: 1px solid var(--border); background: #fff; }
+  .today-item:last-child { margin-bottom: 0; }
+  .today-item.late { background: var(--danger-bg); border-color: #fecaca; }
+  .today-item.today { background: var(--warn-bg); border-color: #fde68a; }
+  .today-item.soon { background: #eff6ff; border-color: #bfdbfe; }
+  .today-info { flex: 1; min-width: 0; }
+  .today-info .co { font-weight: 600; font-size: .92rem; }
+  .today-info .tax { font-size: .8rem; color: var(--text-sub); }
+  .today-info .tax .note { color: #9ca3af; }
+  .today-flag { flex-shrink: 0; font-size: .74rem; font-weight: 600; border-radius: 6px; padding: 3px 8px; }
+  .late .today-flag { background: var(--danger); color: #fff; }
+  .today .today-flag { background: var(--warn); color: #fff; }
+  .soon .today-flag { background: var(--primary); color: #fff; }
+  .btn-done { flex-shrink: 0; height: 36px; border-radius: 9px; border: 1px solid var(--ok); background: var(--ok-bg); color: var(--ok); font-size: .8rem; font-weight: 600; cursor: pointer; padding: 0 12px; font-family: inherit; display: inline-flex; align-items: center; gap: 4px; }
+  .btn-done:active { background: #dcfce7; }
+  .btn-done svg { width: 14px; height: 14px; }
+  .empty-tip { color: var(--text-sub); font-size: .85rem; text-align: center; padding: 14px 0 6px; }
+
+  /* ===== 筛选 ===== */
+  .filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+  .filter-btn { height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border); background: var(--card); color: var(--text-sub); font-size: .85rem; cursor: pointer; font-family: inherit; }
+  .filter-btn.active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 600; }
+  .filter-btn .cnt { font-size: .72rem; opacity: .85; margin-left: 3px; }
+
+  /* ===== 视图切换（公司/税种） ===== */
+  .view-toggle { display: inline-flex; background: var(--bg); border: 1px solid var(--border); border-radius: 11px; padding: 3px; margin-bottom: 12px; }
+  .view-btn { height: 36px; padding: 0 16px; border-radius: 9px; border: none; background: transparent; color: var(--text-sub); font-size: .85rem; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; }
+  .view-btn svg { width: 15px; height: 15px; }
+  .view-btn.active { background: var(--card); color: var(--primary); font-weight: 600; box-shadow: 0 1px 3px rgba(15, 23, 42, .1); }
+
+  /* ===== 公司卡片 ===== */
+  .company-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+  .co-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 15px; }
+  .co-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .co-name { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: .98rem; min-width: 0; }
+  .co-name svg { width: 17px; height: 17px; color: var(--primary); flex-shrink: 0; }
+  .co-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .co-badge { flex-shrink: 0; font-size: .72rem; font-weight: 600; border-radius: 999px; padding: 3px 9px; }
+  .co-badge.full { background: var(--ok-bg); color: var(--ok); }
+  .co-badge.part { background: var(--primary-light); color: var(--primary); }
+  .co-badge.none { background: var(--danger-bg); color: var(--danger); }
+  .co-progress { height: 6px; border-radius: 999px; background: #e8ecf3; overflow: hidden; margin-bottom: 12px; }
+  .co-progress .fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--primary), #3b82f6); transition: width .5s ease; }
+  .co-progress .fill.done { background: var(--ok); }
+  .item-row { display: flex; align-items: center; gap: 9px; padding: 8px 6px; border-top: 1px dashed var(--border); }
+  .item-row:first-of-type { border-top: none; }
+  .toggle-btn { width: 26px; height: 26px; border-radius: 50%; border: 2px solid #cbd5e1; background: #fff; cursor: pointer; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+  .toggle-btn svg { width: 14px; height: 14px; color: #fff; }
+  .toggle-btn.done { border-color: var(--ok); background: var(--ok); }
+  .toggle-btn:disabled { opacity: .55; cursor: default; }
+  .item-main { flex: 1; min-width: 0; }
+  .item-name { font-size: .9rem; font-weight: 500; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .item-name > span, .item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+  .item-name.is-done { color: #9ca3af; text-decoration: line-through; }
+  .item-note { font-size: .74rem; color: #9ca3af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .date-badge { flex-shrink: 0; font-size: .72rem; border-radius: 6px; padding: 3px 7px; font-weight: 600; background: var(--bg); color: var(--text-sub); }
+  .date-badge.late { background: var(--danger); color: #fff; }
+  .date-badge.today { background: var(--warn); color: #fff; }
+  .date-badge.soon { background: var(--primary-light); color: var(--primary); }
+  .del-btn { width: 28px; height: 28px; border-radius: 8px; border: none; background: transparent; color: #c4c9d2; cursor: pointer; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .del-btn:hover { color: var(--danger); background: var(--danger-bg); }
+  .del-btn svg { width: 15px; height: 15px; }
+  .del-btn:disabled { opacity: .5; }
+  .edit-btn { width: 28px; height: 28px; border-radius: 8px; border: none; background: transparent; color: #c4c9d2; cursor: pointer; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center; }
+  .edit-btn:hover { color: var(--primary); background: var(--primary-light); }
+  .edit-btn svg { width: 15px; height: 15px; }
+  .edit-btn:disabled { opacity: .5; }
+
+  /* ===== 编辑弹窗 ===== */
+  .modal-mask { position: fixed; inset: 0; background: rgba(15, 23, 42, .5); z-index: 100; display: none; align-items: flex-end; justify-content: center; }
+  .modal-mask.show { display: flex; }
+  .modal-box { background: var(--card); width: 100%; max-width: 560px; border-radius: 18px 18px 0 0; padding: 20px; max-height: 88vh; overflow-y: auto; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .modal-head h3 { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .modal-head h3 svg { width: 18px; height: 18px; color: var(--primary); }
+  .modal-close { width: 36px; height: 36px; border-radius: 10px; border: none; background: var(--bg); color: var(--text-sub); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+  .modal-close:active { background: var(--border); }
+  .modal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-form .form-item.full { grid-column: 1 / -1; }
+  .modal-msg { grid-column: 1 / -1; font-size: .82rem; border-radius: 9px; padding: 9px 12px; display: none; }
+  .modal-msg.ok { display: block; background: var(--ok-bg); color: var(--ok); }
+  .modal-msg.err { display: block; background: var(--danger-bg); color: var(--danger); }
+  .btn-save { grid-column: 1 / -1; height: 46px; border-radius: 11px; border: none; background: var(--primary); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn-save:hover { background: var(--primary-dark); }
+  .btn-save:disabled { opacity: .65; cursor: default; }
+  .btn-save svg { width: 17px; height: 17px; }
+  @media (min-width: 769px) {
+    .modal-mask { align-items: center; }
+    .modal-box { border-radius: 18px; }
+  }
+
+  /* ===== 表单 ===== */
+  .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form-item { display: flex; flex-direction: column; gap: 6px; }
+  .form-item.full { grid-column: 1 / -1; }
+  .form-item label { font-size: .82rem; color: var(--text-sub); font-weight: 500; }
+  .form-item label .req { color: var(--danger); }
+  .auto-hint { display: inline-flex; align-items: center; gap: 4px; font-size: .7rem; font-weight: 400; color: var(--primary); background: var(--primary-light); border-radius: 5px; padding: 2px 7px; margin-left: 6px; vertical-align: middle; }
+  .auto-hint svg { width: 11px; height: 11px; flex-shrink: 0; }
+  .auto-hint.warn { color: var(--warn); background: var(--warn-bg); }
+  .form-item input, .form-item select {
+    height: 44px; border-radius: 10px; border: 1px solid var(--border); background: #fff;
+    padding: 0 12px; font-size: 1rem; font-family: inherit; color: var(--text); width: 100%;
+  }
+  .form-item input:focus, .form-item select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, .12); }
+  .btn-submit { grid-column: 1 / -1; height: 46px; border-radius: 11px; border: none; background: var(--primary); color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; font-family: inherit; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn-submit:hover { background: var(--primary-dark); }
+  .btn-submit:disabled { opacity: .65; cursor: default; }
+  .btn-submit svg { width: 17px; height: 17px; }
+  .form-msg { grid-column: 1 / -1; font-size: .82rem; border-radius: 9px; padding: 9px 12px; display: none; }
+  .form-msg.ok { display: block; background: var(--ok-bg); color: var(--ok); }
+  .form-msg.err { display: block; background: var(--danger-bg); color: var(--danger); }
+  .tax-custom-wrap { grid-column: 1 / -1; }
+  .hidden { display: none !important; }
+
+  /* ===== 页脚 ===== */
+  .footer { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
+  .btn-ghost { height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--text-sub); font-size: .85rem; cursor: pointer; padding: 0 16px; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-ghost:hover { color: var(--text); border-color: #cbd5e1; }
+  .btn-ghost.danger:hover { color: var(--danger); border-color: #fecaca; background: var(--danger-bg); }
+  .btn-ghost svg { width: 15px; height: 15px; }
+  .carry-btn { height: 40px; border-radius: 10px; border: 1px solid var(--primary); background: var(--primary-light); color: var(--primary); font-size: .85rem; cursor: pointer; padding: 0 14px; font-family: inherit; display: inline-flex; align-items: center; gap: 6px; }
+  .carry-btn:hover { background: var(--primary); color: #fff; }
+  .carry-btn svg { width: 15px; height: 15px; }
+  .carry-btn:active { transform: translateY(1px); }
+  .copyright { text-align: center; font-size: .72rem; color: #b0b6c0; margin-top: 14px; }
+
+  /* ===== Toast ===== */
+  .toast { position: fixed; left: 50%; bottom: calc(30px + env(safe-area-inset-bottom)); transform: translateX(-50%) translateY(20px); background: rgba(17, 24, 39, .92); color: #fff; font-size: .85rem; border-radius: 999px; padding: 10px 20px; opacity: 0; pointer-events: none; transition: all .3s ease; z-index: 99; max-width: 86vw; text-align: center; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .loading-tip { text-align: center; color: var(--text-sub); font-size: .88rem; padding: 30px 0; }
+
+  /* ===== 移动端 ===== */
+  @media (max-width: 768px) {
+    .app { padding: 12px; }
+    .stat-wrap { justify-content: center; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); width: 100%; }
+    .company-grid { grid-template-columns: 1fr; }
+    .form-grid { grid-template-columns: 1fr; }
+    .brand h1 { font-size: 1.05rem; }
+    .today-info .co { font-size: .88rem; }
+    .btn-done { height: 34px; }
+    .card { padding: 14px; }
+  }
+</style>
+
+<style id="taxAuthStyle">
+  .auth-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;align-items:center;justify-content:center;z-index:9999}
+  .auth-overlay.open{display:flex}
+  .auth-card{background:#fff;border-radius:16px;padding:28px 26px;width:320px;max-width:90vw;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+  .auth-title{font-size:18px;font-weight:700;margin-bottom:4px}
+  .auth-sub{font-size:12px;color:#888;margin-bottom:16px}
+  .auth-input{width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #ddd;border-radius:10px;margin-bottom:10px;font-size:14px}
+  .auth-btn{width:100%;padding:10px;border:none;border-radius:10px;background:#2563eb;color:#fff;font-size:15px;cursor:pointer;margin-top:4px}
+  .auth-btn.ghost{background:#eef2ff;color:#2563eb;margin-top:8px}
+  .auth-msg{color:#dc2626;font-size:12px;min-height:16px;margin-bottom:6px}
+  .btn-home{display:inline-flex;align-items:center;gap:4px;margin-left:12px;padding:6px 12px;border:1px solid #e2e8f0;border-radius:999px;background:#fff;color:#334155;font-size:13px;text-decoration:none;cursor:pointer}
+  .btn-home:hover{background:#f1f5f9}
+</style>
+</head>
+<body>
+
+  
+  <div class="gate" id="gate">
+    <div class="gate-box">
+      <div class="gate-logo">
+        <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="11" rx="2" width="18" x="3" y="11" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>
+      </div>
+      <div class="gate-title">报税工作台</div>
+      <div class="gate-sub">请输入访问密码</div>
+      <input autocomplete="off" class="gate-input" id="gatePwd" inputmode="numeric" placeholder="访问密码" type="password" />
+      <button class="gate-btn" id="gateBtn" type="button">进入</button>
+      <div class="gate-err" id="gateErr"></div>
+      <div class="gate-tip">本页面为私有工作台，输入密码后可见</div>
+    </div>
+  </div>
+
+<div class="app">
+
+  
+  <div class="topbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" x2="8" y1="13" y2="13" /><line x1="16" x2="8" y1="17" y2="17" /><line x1="10" x2="8" y1="9" y2="9" /></svg>
+      </div>
+      <div>
+        <h1>每月报税进度总览</h1>
+        <div class="sub">多公司申报事项 · 一屏掌握处理进度</div>
+      </div>
+    </div>
+    <div class="top-actions"><a class="btn-home" id="btnHome" href="index.html">← 应用中心</a>
+      <div class="sync-badge">
+        <span class="sync-dot" id="syncDot"></span>
+        <span id="syncText">已同步</span>
+      </div>
+      <div aria-label="切换预览或编辑" class="mode-switch" id="modeSwitch" role="tablist">
+        <button aria-selected="true" class="mode-btn active" id="modePreview" role="tab" type="button">
+          <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+          预览
+        </button>
+        <button aria-selected="false" class="mode-btn edit" id="modeEdit" role="tab" type="button">
+          <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" /></svg>
+          编辑
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="offline-bar" id="offlineBar">离线模式：当前环境暂不支持数据同步，请从资料库打开本页面使用。数据可正常浏览，暂无法保存修改。</div>
+
+  <div class="mode-banner" id="modeBanner">
+    <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></svg>
+    当前为<b>预览模式</b>，仅可查看；点击右上角「编辑」即可新增与修改。
+  </div>
+
+  
+  <div class="card">
+    <div class="stat-wrap">
+      <div class="ring-box">
+        <svg viewBox="0 0 132 132">
+          <circle class="ring-track" cx="66" cy="66" r="54" />
+          <circle class="ring-bar" cx="66" cy="66" id="ringBar" r="54" stroke-dasharray="339.29" stroke-dashoffset="339.29" transform="rotate(-90 66 66)" />
+          <text class="ring-pct" data-sp-bindable="database" data-sp-database-id="bq2rwh3kibnV13ZQytFj9e" id="ringPct" text-anchor="middle" x="66" y="64">--</text>
+          <text class="ring-label" id="ringSub" text-anchor="middle" x="66" y="86">当月完成率</text>
+        </svg>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-item"><div class="num" data-sp-bindable="database" data-sp-database-id="bq2rwh3kibnV13ZQytFj9e" id="statTotal">--</div><div class="lbl">当月事项总数</div></div>
+        <div aria-label="查看已处理事项" class="stat-item stat-filter ok" data-filter="已处理" role="button" tabindex="0"><div class="num" data-sp-bindable="database" data-sp-database-id="bq2rwh3kibnV13ZQytFj9e" id="statDone">--</div><div class="lbl">已处理</div></div>
+        <div aria-label="查看未处理事项" class="stat-item stat-filter warn" data-filter="未处理" role="button" tabindex="0"><div class="num" data-sp-bindable="database" data-sp-database-id="bq2rwh3kibnV13ZQytFj9e" id="statPending">--</div><div class="lbl">未处理</div></div>
+        <div aria-label="查看逾期未处理事项" class="stat-item stat-filter danger" data-filter="late" role="button" tabindex="0"><div class="num" data-sp-bindable="database" data-sp-database-id="bq2rwh3kibnV13ZQytFj9e" id="statLate">--</div><div class="lbl">逾期未处理</div></div>
+      </div>
+    </div>
+    <div class="month-bar">
+      <span class="lbl">
+        <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><rect height="18" rx="2" ry="2" width="18" x="3" y="4" /><line x1="16" x2="16" y1="2" y2="6" /><line x1="8" x2="8" y1="2" y2="6" /><line x1="3" x2="21" y1="10" y2="10" /></svg>
+        归属月份
+      </span>
+      <div class="month-nav">
+        <button aria-label="上一月" class="btn-icon" id="prevMonth" type="button">
+          <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" /></svg>
+        </button>
+        <select aria-label="选择月份" class="month-select" id="monthSelect"></select>
+        <button aria-label="下一月" class="btn-icon" id="nextMonth" type="button">
+          <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
+        </button>
+      </div>
+      <button class="carry-btn write-only" id="carryBtn" type="button">
+        <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24"><polyline points="13 17 18 12 13 7" /><polyline points="6 17 11 12 6 7" /></svg>
+        顺延申报
+      </button>
+    </div>
+  </div>
+
+  
+  <div class="card" id="todayCard">
+    <div class="card-title" style="justify-content:space-between">
+      <span style="display:inline-flex; align-items:center; gap:8px">
+        <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line x1="12" x2="12" y1="9" y2="13" /><line x1="12" x2="12.01" y1="17" y2="17" /></svg>
+        今天要处理
+        <span class="count zero" data-sp-bindable="database" data-sp-database-id="bq2rwh3kibnV13ZQytFj9e" id="todayCount">0</span>
+      </span>
+      <button aria-expanded="true" aria-label="收起今天要处理" class="collapse-btn" id="todayCollapseBtn" type="button">
+        <svg class="chevron" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><polyline points="6 15 12 9 18 15" /></svg>
+        <span class="collapse-label">收起</span>
+      </button>
+    </div>
+    <div id="todayList"><div class="loading-tip">正在加载数据…</div></div>
+  </div>
+
+  
+  <div class="card">
+    <div class="card-title">
+      <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18" /><path d="M5 21V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v14" /><path d="M13 21V11h6a2 2 0 0 1 2 2v8" /><path d="M8 9h1" /><path d="M8 13h1" /><path d="M16 15h1" /></svg>
+      <span id="coTitle" style="margin-left:2px">公司报税总览</span>
+      <span class="count zero" data-sp-bindable="database" data-sp-database-id="bq2rwh3kibnV13ZQytFj9e" id="coCount" style="background:#9ca3af">0</span>
+    </div>
+    <div aria-label="切换查看维度" class="view-toggle" id="viewToggle" role="tablist">
+      <button aria-selected="true" class="view-btn active" id="viewCompany" role="tab" type="button">
+        <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18" /><path d="M5 21V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v14" /><path d="M13 21V11h6a2 2 0 0 1 2 2v8" /><path d="M8 9h1" /><path d="M8 13h1" /><path d="M16 15h1" /></svg>
+        按公司
+      </button>
+      <button aria-selected="false" class="view-btn" id="viewTax" role="tab" type="button">
+        <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" x2="8" y1="13" y2="13" /><line x1="16" x2="8" y1="17" y2="17" /><line x1="10" x2="8" y1="9" y2="9" /></svg>
+        按税种
+      </button>
+    </div>
+    <div class="filter-bar" id="filterBar"></div>
+    <div id="companyList"><div class="loading-tip">正在加载数据…</div></div>
+  </div>
+
+  
+  <div class="card write-only">
+    <div class="card-title">
+      <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><line x1="12" x2="12" y1="8" y2="16" /><line x1="8" x2="16" y1="12" y2="12" /></svg>
+      添加报税事项
+    </div>
+    <form id="addForm" novalidate="">
+      <div class="form-grid">
+        <div class="form-item">
+          <label for="fCompany">公司名称 <span class="req">*</span></label>
+          <input autocomplete="off" id="fCompany" name="company" placeholder="如：华信科技有限公司" type="text" />
+        </div>
+        <div class="form-item">
+          <label for="fTax">税种事项 <span class="req">*</span></label>
+          <select id="fTax" name="taxItem">
+            <option value="">请选择税种</option>
+            <option value="增值税">增值税（按月）</option>
+            <option value="增值税（小规模·季报）">增值税（小规模·季报）</option>
+            <option value="企业所得税（季报）">企业所得税（季报）</option>
+            <option value="个人所得税">个人所得税</option>
+            <option value="附加税费">附加税费</option>
+            <option value="消费税">消费税</option>
+            <option value="财务报表">财务报表</option>
+            <option value="印花税">印花税（按次）</option>
+            <option value="房产税/城镇土地使用税">房产税/城镇土地使用税（按季）</option>
+            <option value="社保公积金">社保公积金（按当地规定）</option>
+            <option value="其他">其他（自定义税种名称）</option>
+          </select>
+        </div>
+        <div class="form-item full tax-custom-wrap hidden" id="fTaxCustomWrap">
+          <label for="fTaxCustom">请填写具体税种名称 <span class="req">*</span></label>
+          <input autocomplete="off" id="fTaxCustom" name="taxItemCustom" placeholder="如：文化事业建设费、环保税、残保金…" type="text" />
+        </div>
+        <div class="form-item">
+          <label for="fDeadline">截止日期 <span class="req">*</span><span class="auto-hint" id="deadlineHint" style="display:none"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>按征期日历自动填</span></label>
+          <input id="fDeadline" name="deadline" type="date" />
+        </div>
+        <div class="form-item">
+          <label for="fMonth">所属月份 <span class="req">*</span></label>
+          <input autocomplete="off" id="fMonth" name="month" placeholder="如：2026-09（申报月份）" type="month" />
+        </div>
+        <div class="form-item">
+          <label for="fStatus">状态</label>
+          <select id="fStatus" name="status"><option value="">请选择</option></select>
+        </div>
+        <div class="form-item">
+          <label for="fNote">备注</label>
+          <input autocomplete="off" id="fNote" name="note" placeholder="选填，如：待客户提供发票" type="text" />
+        </div>
+        <div class="form-msg" id="formMsg"></div>
+        <button class="btn-submit" id="submitBtn" type="submit">
+          <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24"><line x1="12" x2="12" y1="5" y2="19" /><line x1="5" x2="19" y1="12" y2="12" /></svg>
+          添加事项
+        </button>
+      </div>
+    </form>
+  </div>
+
+  
+  <div class="footer">
+    <button class="btn-ghost" id="exportBtn" type="button">
+      <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
+      导出 JSON 备份
+    </button>
+    <button class="btn-ghost danger write-only" id="clearBtn" type="button">
+      <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+      清空全部数据
+    </button>
+  </div>
+  <div class="copyright">数据存储于云端资料库，多设备自动同步 · 建议定期导出 JSON 备份</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+
+<div class="modal-mask" id="editMask">
+  <div aria-label="编辑报税事项" aria-modal="true" class="modal-box" role="dialog">
+    <div class="modal-head">
+      <h3>
+        <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+        编辑报税事项
+      </h3>
+      <button aria-label="关闭" class="modal-close" id="editClose" type="button">✕</button>
+    </div>
+    <form id="editForm" novalidate="">
+      <div class="modal-form">
+        <div class="form-item full">
+          <label for="eCompany">公司名称 <span class="req">*</span></label>
+          <input autocomplete="off" id="eCompany" name="eCompany" type="text" />
+        </div>
+        <div class="form-item">
+          <label for="eTax">税种事项 <span class="req">*</span></label>
+          <select id="eTax" name="eTax"></select>
+        </div>
+        <div class="form-item full tax-custom-wrap hidden" id="eTaxCustomWrap">
+          <label for="eTaxCustom">请填写具体税种名称 <span class="req">*</span></label>
+          <input autocomplete="off" id="eTaxCustom" name="eTaxCustom" placeholder="如：文化事业建设费、环保税、残保金…" type="text" />
+        </div>
+        <div class="form-item">
+          <label for="eDeadline">截止日期 <span class="req">*</span><span class="auto-hint" id="eDeadlineHint" style="display:none"><svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12" /></svg>按征期日历自动填</span></label>
+          <input id="eDeadline" name="eDeadline" type="date" />
+        </div>
+        <div class="form-item">
+          <label for="eMonth">所属月份 <span class="req">*</span></label>
+          <input autocomplete="off" id="eMonth" name="eMonth" placeholder="如：2026-09" type="month" />
+        </div>
+        <div class="form-item">
+          <label for="eStatus">状态</label>
+          <select id="eStatus" name="eStatus"><option value="">请选择</option></select>
+        </div>
+        <div class="form-item">
+          <label for="eNote">备注</label>
+          <input autocomplete="off" id="eNote" name="eNote" type="text" />
+        </div>
+        <div class="modal-msg" id="editMsg"></div>
+        <button class="btn-save" id="editSaveBtn" type="submit">
+          <svg fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+          保存修改
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ===== 基础配置 ===== */
+  var DATABASE_ID = 'bq2rwh3kibnV13ZQytFj9e';
+  var FORM_CACHE_KEY = 'wb_tax_tracker_form';
+  var RING_CIRC = 339.29; // 2 * PI * 54
+
+  
+  var hasSDK = true; // 接入自建后端（SQLite，按用户隔离），原 WorkBuddy SmartPage SDK 在此替换
+  var db = makeBackendDb();
+
+  /* ===== 后端数据层与登录鉴权（自建 SQLite + 按用户隔离，复用工作台登录态 drb_token） ===== */
+  function getToken() { try { return window.localStorage.getItem('drb_token') || ''; } catch (e) { return ''; } }
+  function getMe() { try { return JSON.parse(window.localStorage.getItem('drb_user') || 'null'); } catch (e) { return null; } }
+  function setAuth(token, user) { try { window.localStorage.setItem('drb_token', token); window.localStorage.setItem('drb_user', JSON.stringify(user)); } catch (e) {} }
+  function api(path, method, body) {
+    return new Promise(function (resolve, reject) {
+      var xhr = new XMLHttpRequest();
+      xhr.open(method || 'GET', path, true);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      var tk = getToken();
+      if (tk) xhr.setRequestHeader('Authorization', 'Bearer ' + tk);
+      xhr.onload = function () {
+        var data; try { data = JSON.parse(xhr.responseText); } catch (e) { data = {}; }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data);
+        else if (xhr.status === 401) reject({ status: 401 });
+        else reject(data || { status: xhr.status });
+      };
+      xhr.onerror = function () { reject({ status: 0 }); };
+      xhr.send(body ? JSON.stringify(body) : null);
+    });
+  }
+  function unwrap(p) {
+    if (!p) return {};
+    var o = {};
+    for (var k in p) {
+      if (!Object.prototype.hasOwnProperty.call(p, k)) continue;
+      var v = p[k];
+      if (v && typeof v === 'object' && ('text' in v || 'select' in v || 'date' in v)) {
+        o[k] = v.text != null ? v.text : (v.select != null ? v.select : v.date);
+      } else { o[k] = v; }
+    }
+    return o;
+  }
+  function makeBackendDb() {
+    var STATUS_OPTS = [{ id: '未处理', text: '未处理' }, { id: '已处理', text: '已处理' }, { id: '逾期', text: '逾期' }];
+    return {
+      getSchema: function () { return Promise.resolve({ properties: [{ name: '状态', type: 'select', config: { options: STATUS_OPTS } }] }); },
+      query: function () {
+        return api('/api/tax/items').then(function (r) { return { results: (r && r.items) || [], hasMore: false, nextCursor: null }; });
+      },
+      addRecord: function (arg) {
+        var p = unwrap(arg.properties);
+        setSync('busy', '保存中…');
+        return api('/api/tax/items', 'POST', p).then(function () { setSync('ok', '已同步'); }).catch(function (e) { setSync('off', '保存失败'); throw e; });
+      },
+      updateRecord: function (arg) {
+        var p = unwrap(arg.properties);
+        setSync('busy', '保存中…');
+        return api('/api/tax/items/' + arg.recordId, 'PUT', p).then(function () { setSync('ok', '已同步'); }).catch(function (e) { setSync('off', '保存失败'); throw e; });
+      },
+      deleteRecord: function (arg) {
+        setSync('busy', '删除中…');
+        return api('/api/tax/items/' + arg.recordId, 'DELETE').then(function () { setSync('ok', '已同步'); }).catch(function (e) { setSync('off', '删除失败'); throw e; });
+      },
+      onUpdated: function () { /* 自建后端在前端变更后自行刷新，无需订阅 */ }
+    };
+  }
+  /* ===== 鉴权门禁：复用工作台登录态（drb_token），未登录弹登录/注册 ===== */
+  function showAuth(onOk) {
+    var ov = document.getElementById('authOverlay');
+    if (!ov) return;
+    ov.classList.add('open');
+    ov._onOk = onOk || function () {};
+  }
+  function hideAuth() { var ov = document.getElementById('authOverlay'); if (ov) ov.classList.remove('open'); }
+  function authSubmit(mode) {
+    var u = document.getElementById('authUser').value.trim();
+    var p = document.getElementById('authPwd').value;
+    var msg = document.getElementById('authMsg');
+    msg.textContent = ''; msg.className = 'auth-msg';
+    if (!u || !p) { msg.textContent = '请输入账号和密码'; msg.className = 'auth-msg err'; return; }
+    api('/api/auth/' + mode, 'POST', { username: u, password: p }).then(function (r) {
+      if (!r || !r.token) { msg.textContent = '操作失败，请重试'; msg.className = 'auth-msg err'; return; }
+      setAuth(r.token, r.user || { username: u });
+      hideAuth();
+      if (typeof document.getElementById('authOverlay')._onOk === 'function') document.getElementById('authOverlay')._onOk();
+    }).catch(function (e) {
+      msg.textContent = (e && e.error) ? e.error : (mode === 'login' ? '账号或密码错误' : '注册失败，用户名可能已存在'); msg.className = 'auth-msg err';
+    });
+  }
+  function ensureAuth(cb) {
+    if (getToken()) { cb(); return; }
+    showAuth(cb);
+  }
+
+
+  var SCHEMA_OPTIONS = {};   // { "状态": [{text, id}] }
+  var allRows = [];          // 全量记录
+  var currentMonth = '';     // YYYY-MM
+  var filterKey = 'all';     // all | 未处理 | 已处理 | late
+  var viewMode = 'company'; // company | tax（查看维度：按公司 / 按税种）
+  try {
+    var savedView = window.localStorage.getItem('wb_tax_view_mode');
+    if (savedView === 'tax' || savedView === 'company') viewMode = savedView;
+  } catch (e) { /* storage 不可用静默降级 */ }
+
+  /* 预览 / 编辑模式：预览=只读，编辑=可新增修改 */
+  var editMode = false;
+  try {
+    // 默认预览（只读）；仅当用户上次主动切到编辑时，才记住为编辑态
+    if (window.localStorage.getItem('wb_tax_edit_mode') === '1') editMode = true;
+  } catch (e) { /* 静默降级 */ }
+
+  var todayCollapsed = false;
+  try {
+    if (window.localStorage.getItem('wb_tax_today_collapsed') === '1') todayCollapsed = true;
+  } catch (e) { /* 静默降级 */ }
+
+  var refreshTimer = null;
+
+  /* ===== 国家征期日历（来源：国家税务总局税总办征科函〔2025〕64号，2026年度申报纳税期限）===== */
+  var TAX_CALENDAR = {
+    '2026-01': '2026-01-20', '2026-02': '2026-02-24', '2026-03': '2026-03-16',
+    '2026-04': '2026-04-20', '2026-05': '2026-05-22', '2026-06': '2026-06-15',
+    '2026-07': '2026-07-15', '2026-08': '2026-08-17', '2026-09': '2026-09-15',
+    '2026-10': '2026-10-26', '2026-11': '2026-11-16', '2026-12': '2026-12-15'
+  };
+
+  /* 税种申报周期：monthly=次月征期；quarterly=所属季度终了后次月征期；manual=不自动（按次/各地不同） */
+  var TAX_CYCLE = {
+    '增值税': 'monthly',
+    '增值税（小规模·季报）': 'quarterly',
+    '企业所得税（季报）': 'quarterly',
+    '个人所得税': 'monthly',
+    '附加税费': 'monthly',
+    '消费税': 'monthly',
+    '财务报表': 'quarterly',
+    '房产税/城镇土地使用税': 'quarterly',
+    '印花税': 'manual',
+    '社保公积金': 'manual',
+    '其他': 'manual'
+  };
+
+  var TAX_OPTIONS = [
+    { value: '增值税', label: '增值税（按月）' },
+    { value: '增值税（小规模·季报）', label: '增值税（小规模·季报）' },
+    { value: '企业所得税（季报）', label: '企业所得税（季报）' },
+    { value: '个人所得税', label: '个人所得税' },
+    { value: '附加税费', label: '附加税费' },
+    { value: '消费税', label: '消费税' },
+    { value: '财务报表', label: '财务报表' },
+    { value: '印花税', label: '印花税（按次）' },
+    { value: '房产税/城镇土地使用税', label: '房产税/城镇土地使用税（按季）' },
+    { value: '社保公积金', label: '社保公积金（按当地规定）' },
+    { value: '其他', label: '其他（自定义税种名称）' }
+  ];
+
+  /* 非日历年份的通用估算：征期末日 15 日，遇周六顺延至 17、周日顺延至 16 */
+  function genericDeadline(ym) {
+    var y = parseInt(ym.slice(0, 4), 10), m = parseInt(ym.slice(5, 7), 10);
+    var d = new Date(y, m - 1, 15);
+    var dom = 15;
+    if (d.getDay() === 6) dom = 17;
+    else if (d.getDay() === 0) dom = 16;
+    return y + '-' + pad2(m) + '-' + pad2(dom);
+  }
+
+  /* 按税种周期 + 所属月份(=申报征期月份)计算申报截止日；返回 {date, mode} 或 null
+     月度税种：直接取所属当月征期；季度税种：归入所属季度末月后的次月申报征期；manual：不自动 */
+  function calcDeadline(taxItem, month) {
+    if (!taxItem || !month || !/^\d{4}-\d{2}$/.test(month)) return null;
+    var cycle = TAX_CYCLE[taxItem];
+    if (!cycle || cycle === 'manual') return null;
+    var y = parseInt(month.slice(0, 4), 10), m = parseInt(month.slice(5, 7), 10);
+    if (cycle === 'quarterly') {
+      m = Math.ceil(m / 3) * 3 + 1;   // 季度末月 + 次月申报（如 9 月→10 月征期）
+      if (m > 12) { m = 1; y += 1; }
+    }
+    // 月度税种：所属月份即申报征期月份，直接取当月征期（如增值税 8 月→8/17）
+    var ym = y + '-' + pad2(m);
+    if (TAX_CALENDAR[ym]) return { date: TAX_CALENDAR[ym], mode: 'calendar' };
+    return { date: genericDeadline(ym), mode: 'estimate' };
+  }
+
+  /* ===== 工具 ===== */
+  function $(id) { return document.getElementById(id); }
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+  function todayStr() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+  }
+  function nowMonth() {
+    var d = new Date();
+    return d.getFullYear() + '-' + pad2(d.getMonth() + 1);
+  }
+  function fmtDate(iso) { return (iso || '').slice(0, 10); }
+  function fmtCN(dateStr) { // 2026-09-15 -> 09月15日
+    if (!dateStr || dateStr.length < 10) return '';
+    return dateStr.slice(5, 7).replace(/^0/, '') + '月' + dateStr.slice(8, 10).replace(/^0/, '') + '日';
+  }
+  function daysUntil(dateStr) {
+    var t = new Date(todayStr() + 'T00:00:00');
+    var d = new Date(dateStr + 'T00:00:00');
+    if (isNaN(d.getTime())) return null;
+    return Math.round((d - t) / 86400000);
+  }
+  function shiftMonth(m, delta) {
+    var y = parseInt(m.slice(0, 4), 10);
+    var mo = parseInt(m.slice(5, 7), 10) + delta;
+    y += Math.floor((mo - 1) / 12);
+    mo = ((mo - 1) % 12 + 12) % 12 + 1;
+    return y + '-' + pad2(mo);
+  }
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+  function normalizeStatus(v) {
+    var s = (v == null) ? '' : String(v);
+    var opts = SCHEMA_OPTIONS['状态'] || [];
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i].id === s) return opts[i].text;
+    }
+    return s;
+  }
+  function statusId(text) {
+    var opts = SCHEMA_OPTIONS['状态'] || [];
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i].text === text) return opts[i].id;
+    }
+    return text;
+  }
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.className = 'toast show';
+    setTimeout(function () { t.className = 'toast'; }, 2200);
+  }
+  function setSync(state, text) {
+    var dot = $('syncDot'), txt = $('syncText');
+    dot.className = 'sync-dot' + (state === 'off' ? ' off' : (state === 'busy' ? ' busy' : ''));
+    txt.textContent = text;
+  }
+  /* 数据库派生文本统一打绑定标记（DSDK011/012） */
+  function bindDb(el) {
+    el.setAttribute('data-sp-bindable', 'database');
+    el.setAttribute('data-sp-database-id', DATABASE_ID);
+    return el;
+  }
+
+  /* 预览模式守卫：只读时禁止任何写操作 */
+  function guardEdit() {
+    if (!editMode) { toast('预览模式不可修改，请先切换到「编辑」'); return false; }
+    return true;
+  }
+
+  /* 应用预览 / 编辑模式（默认预览，仅切到编辑时写元素可见） */
+  function applyMode() {
+    document.body.classList.toggle('preview', !editMode);
+    var bp = $('modePreview'), be = $('modeEdit');
+    if (bp) { bp.classList.toggle('active', !editMode); bp.setAttribute('aria-selected', String(!editMode)); }
+    if (be) { be.classList.toggle('active', editMode); be.setAttribute('aria-selected', String(editMode)); }
+  }
+
+  function bindModeSwitch() {
+    var bp = $('modePreview'), be = $('modeEdit');
+    if (bp) bp.addEventListener('click', function () {
+      editMode = false;
+      try { window.localStorage.setItem('wb_tax_edit_mode', '0'); } catch (e) { /* 静默 */ }
+      applyMode();
+    });
+    if (be) be.addEventListener('click', function () {
+      editMode = true;
+      try { window.localStorage.setItem('wb_tax_edit_mode', '1'); } catch (e) { /* 静默 */ }
+      applyMode();
+    });
+  }
+
+  /* ===== 初始化 ===== */
+  function init() {
+    currentMonth = nowMonth();
+    $('fMonth').value = currentMonth;
+
+    if (!hasSDK) {
+      $('offlineBar').classList.add('show');
+      setSync('off', '离线模式');
+      allRows = [];
+      renderAll();
+      return;
+    }
+    setSync('busy', '同步中…');
+    db.getSchema({ databaseId: DATABASE_ID }).then(function (schema) {
+      (schema.properties || []).forEach(function (field) {
+        if ((field.type === 'select' || field.type === 'multi_select') && field.config && field.config.options) {
+          SCHEMA_OPTIONS[field.name] = field.config.options;
+        }
+      });
+      renderSelectOptions();
+      renderEditStatusOptions();
+      restoreFormCache();
+      loadData();
+      subscribeUpdates();
+    }).catch(function (err) {
+      console.error('[database] schema 加载失败:', err);
+      setSync('off', '连接失败');
+      renderSelectOptions();
+      renderEditStatusOptions();
+      restoreFormCache();
+      loadData();
+      subscribeUpdates();
+    });
+  }
+
+  function renderSelectOptions() {
+    // 状态下拉：选项由 db.getSchema 动态填充，禁止硬编码
+    var sel = document.querySelector('[name="status"]');
+    if (!sel) return;
+    var opts = SCHEMA_OPTIONS['状态'] || [];
+    sel.innerHTML = '';
+    var pendingId = '';
+    for (var i = 0; i < opts.length; i++) {
+      var o = document.createElement('option');
+      o.value = opts[i].id;
+      o.textContent = opts[i].text;
+      sel.appendChild(o);
+      if (opts[i].text === '未处理') pendingId = opts[i].id;
+    }
+    if (pendingId) sel.value = pendingId;
+
+    // 筛选按钮：全部 / 动态状态选项 / 逾期
+    var bar = $('filterBar');
+    bar.innerHTML = '';
+    var mk = function (key, label) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'filter-btn' + (filterKey === key ? ' active' : '');
+      b.setAttribute('data-filter', key);
+      b.innerHTML = '<span class="fl">' + esc(label) + '</span>';
+      b.addEventListener('click', function () {
+        filterKey = key;
+        renderFilterBar();
+        renderCompanies();
+      });
+      bar.appendChild(b);
+    };
+    mk('all', '全部');
+    for (var j = 0; j < opts.length; j++) mk(opts[j].text, opts[j].text);
+    mk('late', '逾期未处理');
+    renderFilterBar();
+  }
+
+  function setFilter(key) {
+    if (filterKey === key) filterKey = 'all';
+    else filterKey = key;
+    renderFilterBar();
+    renderCompanies();
+    var listTop = $('companyList');
+    if (listTop && listTop.scrollIntoView) {
+      try { listTop.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { listTop.scrollIntoView(true); }
+    }
+  }
+
+  function renderFilterBar() {
+    var btns = $('filterBar').querySelectorAll('.filter-btn');
+    for (var i = 0; i < btns.length; i++) {
+      var key = btns[i].getAttribute('data-filter');
+      var on = btns[i].className.indexOf('active') > -1;
+      btns[i].className = 'filter-btn' + (filterKey === key ? ' active' : '');
+      var span = btns[i].querySelector('.cnt');
+      if (span) span.parentNode.removeChild(span);
+      var cnt = filterCount(key);
+      if (cnt > 0) {
+        var s = document.createElement('span');
+        s.className = 'cnt';
+        s.textContent = cnt;
+        bindDb(s);
+        btns[i].appendChild(s);
+      }
+      if (typeof on === 'undefined') { /* noop */ }
+    }
+    // 同步统计卡片的选中态
+    var statItems = document.querySelectorAll('.stat-filter');
+    for (var s = 0; s < statItems.length; s++) {
+      var fk = statItems[s].getAttribute('data-filter');
+      var cls = statItems[s].className.replace(/\s*active/g, '');
+      statItems[s].className = cls + (filterKey === fk ? ' active' : '');
+    }
+  }
+
+  function monthRows() {
+    var arr = [];
+    for (var i = 0; i < allRows.length; i++) {
+      if (String(allRows[i]['所属月份'] || '') === currentMonth) arr.push(allRows[i]);
+    }
+    return arr;
+  }
+
+  function filterCount(key) {
+    var rows = monthRows();
+    if (key === 'all') return rows.length;
+    var c = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var st = normalizeStatus(rows[i]['状态']);
+      var dd = daysUntil(fmtDate(rows[i]['截止日期']));
+      if (key === 'late') {
+        if (st !== '已处理' && dd !== null && dd < 0) c++;
+      } else {
+        if (st === key) c++;
+      }
+    }
+    return c;
+  }
+
+  /* ===== 数据加载（分页拉全量） ===== */
+  function loadData() {
+    if (!hasSDK) { renderAll(); return; }
+    setSync('busy', '同步中…');
+    loadAll(undefined, [], 0).then(function (rows) {
+      allRows = rows || [];
+      setSync('ok', '已同步');
+      renderAll();
+    }).catch(function (err) {
+      console.error('[database] 数据加载失败:', err);
+      setSync('off', '同步失败');
+      toast('数据加载失败，请稍后刷新重试');
+    });
+  }
+
+  function loadAll(startCursor, acc, guard) {
+    acc = acc || [];
+    guard = guard || 0;
+    if (guard > 100) return Promise.resolve(acc);
+    return db.query({
+      databaseId: DATABASE_ID,
+      sorts: [{ property: '截止日期', direction: 'ascending' }],
+      pageSize: 200,
+      startCursor: startCursor
+    }).then(function (r) {
+      acc = acc.concat(r.results || []);
+      var next = r.nextCursor;
+      if (r.hasMore && next && next !== startCursor && (r.results || []).length) {
+        return loadAll(next, acc, guard + 1);
+      }
+      return acc;
+    });
+  }
+
+  /* 数据变更订阅：去抖 300ms 后重新拉取 */
+  function subscribeUpdates() {
+    if (!db || typeof db.onUpdated !== 'function') return;
+    db.onUpdated(function (payload) {
+      var ids = (payload && payload.databaseIds) || [];
+      if (ids.indexOf(DATABASE_ID) === -1) return;
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(function () {
+        refreshTimer = null;
+        loadData();
+      }, 300);
+    });
+  }
+
+  /* ===== 渲染总入口 ===== */
+  function renderAll() {
+    renderMonthOptions();
+    renderStats();
+    renderToday();
+    renderCompanies();
+  }
+
+  function renderMonthOptions() {
+    var sel = $('monthSelect');
+    var set = {};
+    var list = [];
+    set[currentMonth] = true; list.push(currentMonth);
+    for (var i = 0; i < allRows.length; i++) {
+      var m = String(allRows[i]['所属月份'] || '');
+      if (m && !set[m]) { set[m] = true; list.push(m); }
+    }
+    if (!set[nowMonth()]) { list.push(nowMonth()); }
+    list.sort();
+    var cur = sel.value;
+    sel.innerHTML = '';
+    var allOpt = document.createElement('option');
+    allOpt.value = '';
+    allOpt.textContent = '全部月份';
+    sel.appendChild(allOpt);
+    for (var j = 0; j < list.length; j++) {
+      var o = document.createElement('option');
+      o.value = list[j];
+      o.textContent = list[j];
+      sel.appendChild(o);
+    }
+    sel.value = (currentMonth === '' ? '' : currentMonth);
+    if (sel.selectedIndex === -1) sel.value = list[0] || nowMonth();
+    updateCarryLabel();
+  }
+
+  /* 统计区 */
+  function renderStats() {
+    var rows = monthRows();
+    var total = rows.length, done = 0, pending = 0, late = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var st = normalizeStatus(rows[i]['状态']);
+      var dd = daysUntil(fmtDate(rows[i]['截止日期']));
+      if (st === '已处理') { done++; }
+      else {
+        pending++;
+        if (dd !== null && dd < 0) late++;
+      }
+    }
+    var pct = total ? Math.round(done / total * 100) : 0;
+
+    var ring = $('ringBar');
+    ring.setAttribute('stroke-dashoffset', String(RING_CIRC * (1 - pct / 100)));
+    var pctText = $('ringPct');
+    pctText.textContent = total ? pct + '%' : '--';
+    bindDb(pctText);
+    var subText = $('ringSub');
+    subText.textContent = (currentMonth ? currentMonth + ' 完成率' : '全部月份完成率');
+    var nums = { statTotal: total, statDone: done, statPending: pending, statLate: late };
+    for (var k in nums) {
+      if (Object.prototype.hasOwnProperty.call(nums, k)) {
+        var el = $(k);
+        el.textContent = nums[k];
+        bindDb(el);
+      }
+    }
+    // 绑定统计卡片点击筛选（每次渲染时重新绑定，避免事件重复只需覆盖）
+    var statItems = document.querySelectorAll('.stat-filter');
+    for (var s = 0; s < statItems.length; s++) {
+      (function (item) {
+        var newItem = item.cloneNode(true);
+        item.parentNode.replaceChild(newItem, item);
+        newItem.addEventListener('click', function () { setFilter(newItem.getAttribute('data-filter')); });
+        newItem.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilter(newItem.getAttribute('data-filter')); } });
+      })(statItems[s]);
+    }
+    renderFilterBar();
+  }
+
+  /* 今天要处理（全局视角，不受月份筛选影响） */
+  function renderToday() {
+    var box = $('todayList');
+    box.innerHTML = '';
+    var list = [];
+    for (var i = 0; i < allRows.length; i++) {
+      var row = allRows[i];
+      if (normalizeStatus(row['状态']) === '已处理') continue;
+      var due = fmtDate(row['截止日期']);
+      if (!due) continue;
+      var dd = daysUntil(due);
+      // 提醒窗口：进入当月即从 1 号起，提醒当月（及更早逾期）所有未处理事项
+      if (due.slice(0, 7) <= nowMonth()) list.push({ row: row, dd: dd });
+    }
+    list.sort(function (a, b) { return a.dd - b.dd; });
+
+    var cnt = $('todayCount');
+    cnt.textContent = list.length;
+    bindDb(cnt);
+    cnt.className = 'count' + (list.length ? '' : ' zero');
+
+    if (!list.length) {
+      var ok = document.createElement('div');
+      ok.className = 'empty-tip';
+      ok.textContent = '太棒了，本月没有待处理的报税事项';
+      box.appendChild(ok);
+      applyTodayCollapse();
+      return;
+    }
+
+    var CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    for (var j = 0; j < list.length; j++) {
+      (function (item) {
+        var dd = item.dd;
+        var cls = dd < 0 ? 'late' : (dd === 0 ? 'today' : 'soon');
+        var flag = dd < 0 ? '已逾期 ' + (-dd) + ' 天' : (dd === 0 ? '今天截止' : dd + ' 天后截止');
+        var div = document.createElement('div');
+        div.className = 'today-item ' + cls;
+
+        var info = document.createElement('div');
+        info.className = 'today-info';
+        var co = document.createElement('div');
+        co.className = 'co';
+        co.textContent = String(item.row['公司名称'] || '未命名公司');
+        bindDb(co);
+        var tax = document.createElement('div');
+        tax.className = 'tax';
+        var t1 = document.createElement('span');
+        t1.textContent = String(item.row['税种事项'] || '') + ' · 截止 ' + fmtCN(fmtDate(item.row['截止日期']));
+        bindDb(t1);
+        tax.appendChild(t1);
+        var note = String(item.row['备注'] || '');
+        if (note) {
+          var t2 = document.createElement('span');
+          t2.className = 'note';
+          t2.textContent = ' · ' + note;
+          bindDb(t2);
+          tax.appendChild(t2);
+        }
+        info.appendChild(co);
+        info.appendChild(tax);
+
+        var fl = document.createElement('span');
+        fl.className = 'today-flag';
+        fl.textContent = flag;
+
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-done write-only';
+        btn.innerHTML = CHECK_SVG + '<span>已处理</span>';
+        btn.addEventListener('click', function () {
+          markDone(item.row, btn);
+        });
+
+        div.appendChild(info);
+        div.appendChild(fl);
+        div.appendChild(btn);
+        box.appendChild(div);
+      })(list[j]);
+    }
+    applyTodayCollapse();
+  }
+
+  /* 今天要处理收起/展开 */
+  function applyTodayCollapse() {
+    var card = $('todayCard');
+    var btn = $('todayCollapseBtn');
+    if (!card || !btn) return;
+    var label = btn.querySelector('.collapse-label');
+    card.classList.toggle('collapsed', todayCollapsed);
+    btn.classList.toggle('collapsed', todayCollapsed);
+    btn.setAttribute('aria-expanded', String(!todayCollapsed));
+    if (label) label.textContent = todayCollapsed ? '展开' : '收起';
+  }
+  function saveTodayCollapse() {
+    try {
+      window.localStorage.setItem('wb_tax_today_collapsed', todayCollapsed ? '1' : '0');
+    } catch (e) { /* 静默降级 */ }
+  }
+  function bindTodayCollapse() {
+    var btn = $('todayCollapseBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      todayCollapsed = !todayCollapsed;
+      saveTodayCollapse();
+      applyTodayCollapse();
+    });
+    applyTodayCollapse();
+  }
+
+  /* 访问密码门（前端校验，防误看非真加密） */
+  var GATE_PWD = '123456';
+  var GATE_KEY = 'wb_tax_gate_ok';
+  function gateIsUnlocked() {
+    try { return window.localStorage.getItem(GATE_KEY) === '1'; } catch (e) { return false; }
+  }
+  function gateUnlock() {
+    try { window.localStorage.setItem(GATE_KEY, '1'); } catch (e) { /* 静默降级 */ }
+    var g = $('gate'); if (g) g.classList.add('hide');
+  }
+  function bindGate() {
+    var gate = $('gate');
+    if (!gate) return;
+    if (gateIsUnlocked()) { gate.classList.add('hide'); return; }
+    var pwd = $('gatePwd'), btn = $('gateBtn'), err = $('gateErr');
+    function tryUnlock() {
+      if (!pwd) return;
+      if (pwd.value === GATE_PWD) {
+        gateUnlock();
+      } else {
+        if (err) err.textContent = '密码错误，请重试';
+        pwd.value = '';
+        pwd.focus();
+      }
+    }
+    if (btn) btn.addEventListener('click', tryUnlock);
+    if (pwd) {
+      pwd.addEventListener('keydown', function (e) { if (e.key === 'Enter') tryUnlock(); });
+      setTimeout(function () { try { pwd.focus(); } catch (e) {} }, 60);
+    }
+  }
+
+  /* 公司卡片 */
+  function renderCompanies() {
+    var box = $('companyList');
+    box.innerHTML = '';
+    var rows = monthRows();
+    // 筛选
+    var filtered = [];
+    for (var i = 0; i < rows.length; i++) {
+      var st = normalizeStatus(rows[i]['状态']);
+      var dd = daysUntil(fmtDate(rows[i]['截止日期']));
+      var pass = true;
+      if (filterKey === 'late') pass = (st !== '已处理' && dd !== null && dd < 0);
+      else if (filterKey !== 'all') pass = (st === filterKey);
+      if (pass) filtered.push(rows[i]);
+    }
+    // 按当前视图维度分组（公司视图=按公司名称，税种视图=按税种事项）
+    var groupField = (viewMode === 'tax') ? '税种事项' : '公司名称';
+    var groupFallback = (viewMode === 'tax') ? '未分类税种' : '未命名公司';
+    var groups = {}, names = [];
+    for (var j = 0; j < filtered.length; j++) {
+      var co = String(filtered[j][groupField] || groupFallback);
+      if (!groups[co]) { groups[co] = []; names.push(co); }
+      groups[co].push(filtered[j]);
+    }
+    names.sort(function (a, b) {
+      var ra = pendingCount(groups[a]), rb = pendingCount(groups[b]);
+      if (ra !== rb) return rb - ra;
+      return a.localeCompare(b, 'zh');
+    });
+
+    var coBadge = $('coCount');
+    coBadge.textContent = names.length;
+    bindDb(coBadge);
+
+    if (!names.length) {
+      var empty = document.createElement('div');
+      empty.className = 'empty-tip';
+      empty.textContent = allRows.length ? '当前月份暂无符合条件的报税事项' : '暂无数据，请在下方添加第一条报税事项';
+      if (allRows.length) bindDb(empty);
+      box.appendChild(empty);
+      return;
+    }
+
+    var BUILDING_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21h18"/><path d="M5 21V7a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v14"/><path d="M13 21V11h6a2 2 0 0 1 2 2v8"/><path d="M8 9h1"/><path d="M8 13h1"/><path d="M16 15h1"/></svg>';
+    var TAX_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>';
+    var HEAD_SVG = (viewMode === 'tax') ? TAX_SVG : BUILDING_SVG;
+    var CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    var TRASH_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>';
+    var EDIT_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+
+    for (var g = 0; g < names.length; g++) {
+      (function (coName, items) {
+        var cardEl = document.createElement('div');
+        cardEl.className = 'co-card';
+
+        var doneN = 0;
+        for (var x = 0; x < items.length; x++) {
+          if (normalizeStatus(items[x]['状态']) === '已处理') doneN++;
+        }
+        var allDone = doneN === items.length && items.length > 0;
+        var noDone = doneN === 0;
+
+        var head = document.createElement('div');
+        head.className = 'co-head';
+        var nm = document.createElement('div');
+        nm.className = 'co-name';
+        nm.innerHTML = HEAD_SVG;
+        var nmSpan = document.createElement('span');
+        nmSpan.textContent = coName;
+        nmSpan.title = coName;
+        nmSpan.setAttribute('data-field', 'company');
+        bindDb(nmSpan);
+        nm.appendChild(nmSpan);
+        var badge = document.createElement('span');
+        badge.className = 'co-badge ' + (allDone ? 'full' : (noDone ? 'none' : 'part'));
+        badge.textContent = allDone ? '全部完成' : (doneN + '/' + items.length + ' 已完成');
+        badge.setAttribute('data-field', 'status');
+        bindDb(badge);
+        head.appendChild(nm);
+        head.appendChild(badge);
+
+        var prog = document.createElement('div');
+        prog.className = 'co-progress';
+        var fill = document.createElement('div');
+        fill.className = 'fill' + (allDone ? ' done' : '');
+        fill.style.width = (items.length ? Math.round(doneN / items.length * 100) : 0) + '%';
+        prog.appendChild(fill);
+
+        cardEl.appendChild(head);
+        cardEl.appendChild(prog);
+
+        // 事项按截止日期排序
+        items.sort(function (a, b) {
+          var da = fmtDate(a['截止日期']), dbb = fmtDate(b['截止日期']);
+          return da < dbb ? -1 : (da > dbb ? 1 : 0);
+        });
+
+        for (var y = 0; y < items.length; y++) {
+          (function (row) {
+            var isDone = normalizeStatus(row['状态']) === '已处理';
+            var dd = daysUntil(fmtDate(row['截止日期']));
+            var rowEl = document.createElement('div');
+            rowEl.className = 'item-row';
+
+            var tg = document.createElement('button');
+            tg.type = 'button';
+            tg.className = 'toggle-btn' + (isDone ? ' done' : '') + ' write-only';
+            tg.setAttribute('aria-label', isDone ? '标记为未处理' : '标记为已处理');
+            if (isDone) tg.innerHTML = CHECK_SVG;
+            tg.addEventListener('click', function () { toggleStatus(row, tg); });
+
+            var main = document.createElement('div');
+            main.className = 'item-main';
+            var nm2 = document.createElement('div');
+            nm2.className = 'item-name' + (isDone ? ' is-done' : '');
+            if (viewMode === 'tax') {
+              // 税种视图：卡片头是税种，行内显示公司名
+              nm2.textContent = String(row['公司名称'] || '未命名公司');
+              nm2.setAttribute('data-field', 'company');
+            } else {
+              // 公司视图：卡片头是公司，行内显示税种名
+              nm2.textContent = String(row['税种事项'] || '未命名事项');
+              nm2.setAttribute('data-field', 'taxItem');
+            }
+            bindDb(nm2);
+            main.appendChild(nm2);
+            var note = String(row['备注'] || '');
+            if (note) {
+              var nt = document.createElement('div');
+              nt.className = 'item-note';
+              nt.textContent = note;
+              nt.setAttribute('data-field', 'note');
+              bindDb(nt);
+              main.appendChild(nt);
+            }
+
+            var db_ = document.createElement('span');
+            var dCls = 'date-badge';
+            if (!isDone && dd !== null) {
+              if (dd < 0) dCls += ' late';
+              else if (dd === 0) dCls += ' today';
+              else if (dd <= 7) dCls += ' soon';
+            }
+            db_.className = dCls;
+            var dTxt = fmtCN(fmtDate(row['截止日期']));
+            if (!isDone && dd !== null && dd < 0) dTxt += ' 逾期';
+            else if (!isDone && dd === 0) dTxt += ' 今天';
+            db_.textContent = dTxt;
+            db_.setAttribute('data-field', 'deadline');
+            bindDb(db_);
+
+            var del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'del-btn write-only';
+            del.setAttribute('aria-label', '删除该事项');
+            del.innerHTML = TRASH_SVG;
+            del.addEventListener('click', function () { deleteRow(row); });
+
+            var edit = document.createElement('button');
+            edit.type = 'button';
+            edit.className = 'edit-btn write-only';
+            edit.setAttribute('aria-label', '编辑该事项');
+            edit.innerHTML = EDIT_SVG;
+            edit.addEventListener('click', function () { openEdit(row); });
+
+            rowEl.appendChild(tg);
+            rowEl.appendChild(main);
+            rowEl.appendChild(db_);
+            rowEl.appendChild(edit);
+            rowEl.appendChild(del);
+            cardEl.appendChild(rowEl);
+          })(items[y]);
+        }
+        box.appendChild(cardEl);
+      })(names[g], groups[names[g]]);
+    }
+  }
+
+  function pendingCount(items) {
+    var c = 0;
+    for (var i = 0; i < items.length; i++) {
+      if (normalizeStatus(items[i]['状态']) !== '已处理') c++;
+    }
+    return c;
+  }
+
+  /* ===== 交互动作 ===== */
+  function markDone(row, btn) {
+    if (!guardEdit()) return;
+    if (!hasSDK) { toast('离线模式，暂无法修改'); return; }
+    if (btn) { btn.disabled = true; }
+    db.updateRecord({
+      databaseId: DATABASE_ID,
+      recordId: row._id,
+      properties: { '状态': { select: statusId('已处理') } }
+    }).then(function () {
+      toast('已标记为已处理');
+      loadData();
+    }).catch(function (err) {
+      console.error('[database] 更新失败:', err);
+      if (btn) { btn.disabled = false; }
+      toast('操作失败，请稍后重试');
+    });
+  }
+
+  function toggleStatus(row, btn) {
+    if (!guardEdit()) return;
+    if (!hasSDK) { toast('离线模式，暂无法修改'); return; }
+    if (btn) { btn.disabled = true; }
+    var cur = normalizeStatus(row['状态']);
+    var target = cur === '已处理' ? '未处理' : '已处理';
+    db.updateRecord({
+      databaseId: DATABASE_ID,
+      recordId: row._id,
+      properties: { '状态': { select: statusId(target) } }
+    }).then(function () {
+      loadData();
+    }).catch(function (err) {
+      console.error('[database] 更新失败:', err);
+      if (btn) { btn.disabled = false; }
+      toast('操作失败，请稍后重试');
+    });
+  }
+
+  function deleteRow(row) {
+    if (!guardEdit()) return;
+    if (!hasSDK) { toast('离线模式，暂无法删除'); return; }
+    if (!window.confirm('确定删除「' + String(row['公司名称'] || '') + ' · ' + String(row['税种事项'] || '') + '」这条事项吗？删除后不可恢复。')) return;
+    db.deleteRecord({ databaseId: DATABASE_ID, recordId: row._id }).then(function () {
+      toast('已删除');
+      loadData();
+    }).catch(function (err) {
+      console.error('[database] 删除失败:', err);
+      toast('删除失败，请稍后重试');
+    });
+  }
+
+  /* ===== 编辑事项弹窗 ===== */
+  var editingId = null;
+
+  function openEdit(row) {
+    if (!guardEdit()) return;
+    if (!hasSDK) { toast('离线模式，暂无法编辑'); return; }
+    editingId = row._id;
+    var msg = $('editMsg');
+    msg.className = 'modal-msg';
+
+    $('eCompany').value = String(row['公司名称'] || '');
+    fillEditTaxOptions(String(row['税种事项'] || ''));
+    $('eDeadline').value = fmtDate(row['截止日期']);
+    $('eMonth').value = String(row['所属月份'] || '');
+    $('eNote').value = String(row['备注'] || '');
+    var openHint = $('eDeadlineHint');
+    if (openHint) { openHint.style.display = 'none'; openHint.className = 'auto-hint'; }
+
+    // 状态下拉回填
+    var statusSel = $('eStatus');
+    var curText = normalizeStatus(row['状态']);
+    var matched = false;
+    for (var i = 0; i < statusSel.options.length; i++) {
+      if (statusSel.options[i].textContent === curText) {
+        statusSel.selectedIndex = i;
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) statusSel.selectedIndex = 0;
+
+    $('editMask').classList.add('show');
+  }
+
+  function closeEdit() {
+    $('editMask').classList.remove('show');
+    editingId = null;
+  }
+
+  function renderEditStatusOptions() {
+    // 编辑弹窗状态下拉，由 db.getSchema 动态填充（不硬编码）
+    var sel = $('eStatus');
+    if (!sel) return;
+    var opts = SCHEMA_OPTIONS['状态'] || [];
+    sel.innerHTML = '';
+    var firstId = '';
+    for (var i = 0; i < opts.length; i++) {
+      var o = document.createElement('option');
+      o.value = opts[i].id;
+      o.textContent = opts[i].text;
+      sel.appendChild(o);
+      if (!firstId) firstId = opts[i].id;
+    }
+    if (firstId) sel.value = firstId;
+  }
+
+  /* 编辑弹窗税种下拉：标准清单 + 历史自定义值动态兼容 */
+  function fillEditTaxOptions(current) {
+    var sel = $('eTax');
+    if (!sel) return;
+    sel.innerHTML = '';
+    var opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = '请选择税种';
+    sel.appendChild(opt0);
+    var isStandard = false;
+    for (var i = 0; i < TAX_OPTIONS.length; i++) {
+      var o = document.createElement('option');
+      o.value = TAX_OPTIONS[i].value;
+      o.textContent = TAX_OPTIONS[i].label;
+      sel.appendChild(o);
+      if (TAX_OPTIONS[i].value === current) isStandard = true;
+    }
+    // 历史记录里的自定义税种名：归入「其他」并预填到自定义名称输入框
+    var isCustom = !!current && !isStandard && current !== '其他';
+    sel.value = (current && !isCustom) ? current : (isCustom ? '其他' : '');
+    if (sel.selectedIndex === -1) sel.selectedIndex = 0;
+    var cInput = $('eTaxCustom');
+    if (cInput) cInput.value = isCustom ? current : '';
+    syncTaxCustom('e');
+  }
+
+  /* ===== 其他税种：自定义名称输入框显隐同步 ===== */
+  /* 选择「其他」时展示并读取自定义名称输入框；选回标准税种时隐藏并清空 */
+  function syncTaxCustom(prefix) { // '' = 添加表单；'e' = 编辑弹窗
+    var sel = $(prefix ? 'eTax' : 'fTax');
+    var wrap = $(prefix ? 'eTaxCustomWrap' : 'fTaxCustomWrap');
+    var input = $(prefix ? 'eTaxCustom' : 'fTaxCustom');
+    if (!sel || !wrap || !input) return;
+    if (sel.value === '其他') {
+      wrap.classList.remove('hidden');
+      input.focus();
+    } else {
+      wrap.classList.add('hidden');
+      input.value = '';
+    }
+  }
+
+  /* ===== 截止日期自动填充（按国家征期日历）===== */
+  var HINT_CHECK_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  var HINT_WARN_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+
+  function autoFillDeadline(prefix) { // '' = 添加表单；'e' = 编辑弹窗
+    var taxEl = $(prefix ? 'eTax' : 'fTax');
+    var monthEl = $(prefix ? 'eMonth' : 'fMonth');
+    var dlEl = $(prefix ? 'eDeadline' : 'fDeadline');
+    var hint = $(prefix ? 'eDeadlineHint' : 'deadlineHint');
+    if (!taxEl || !monthEl || !dlEl || !hint) return;
+    var r = calcDeadline(taxEl.value, monthEl.value);
+    if (r) {
+      dlEl.value = r.date;
+      hint.style.display = 'inline-flex';
+      hint.className = 'auto-hint' + (r.mode === 'estimate' ? ' warn' : '');
+      hint.innerHTML = (r.mode === 'estimate' ? HINT_WARN_SVG : HINT_CHECK_SVG) +
+        (r.mode === 'estimate' ? '按通用规则估算' : '按征期日历自动填');
+    } else {
+      // manual/未知税种：不自动计算，清空截止日期交给用户手动填写，避免残留上一个税种的日期
+      hint.style.display = 'none';
+      dlEl.value = '';
+    }
+  }
+
+  function bindAutoDeadline() {
+    // 添加表单：税种 / 所属月份变化 → 自动算截止日
+    $('fTax').addEventListener('change', function () { autoFillDeadline(''); syncTaxCustom(''); });
+    $('fMonth').addEventListener('change', function () { autoFillDeadline(''); });
+    // 手动改截止日期 → 收起自动提示（以手动值为准）
+    $('fDeadline').addEventListener('change', function () {
+      var h = $('deadlineHint');
+      if (h) h.style.display = 'none';
+    });
+    // 编辑弹窗同理
+    $('eTax').addEventListener('change', function () { autoFillDeadline('e'); syncTaxCustom('e'); });
+    $('eMonth').addEventListener('change', function () { autoFillDeadline('e'); });
+    $('eDeadline').addEventListener('change', function () {
+      var h = $('eDeadlineHint');
+      if (h) h.style.display = 'none';
+    });
+  }
+
+  function bindEdit() {
+    $('editClose').addEventListener('click', closeEdit);
+    $('editMask').addEventListener('click', function (e) {
+      if (e.target === $('editMask')) closeEdit();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeEdit();
+    });
+
+    $('editForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var msg = $('editMsg');
+      msg.className = 'modal-msg';
+
+      var company = $('eCompany').value.trim();
+      var selTax = $('eTax').value.trim();
+      var taxItem = selTax;
+      var eCustomEl = $('eTaxCustom');
+      if (selTax === '其他') taxItem = eCustomEl ? eCustomEl.value.trim() : '';
+      var deadline = $('eDeadline').value;
+      var month = $('eMonth').value.trim();
+      var statusVal = $('eStatus').value;
+      var note = $('eNote').value.trim();
+
+      function err(t) { msg.textContent = t; msg.className = 'modal-msg err'; return false; }
+
+      if (!company) return err('请填写公司名称');
+      if (!selTax) return err('请选择税种事项');
+      if (selTax === '其他' && !taxItem) return err('请填写「其他」对应的具体税种名称');
+      if (!deadline) return err(TAX_CYCLE[taxItem] === 'manual' ? '该税种按次/按当地规定申报，请手动填写截止日期' : '请选择截止日期');
+      if (!/^\d{4}-\d{2}$/.test(month)) return err('所属月份格式应为 YYYY-MM，如 2026-09');
+
+      if (!hasSDK) { err('离线模式，暂无法保存'); return; }
+      if (!editingId) { err('未找到待编辑记录'); return; }
+
+      var saveBtn = $('editSaveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = '保存中…';
+
+      var properties = {};
+      properties['公司名称'] = { text: company };
+      properties['税种事项'] = { text: taxItem };
+      properties['状态'] = { select: statusVal || statusId('未处理') };
+      properties['截止日期'] = { date: deadline };
+      properties['所属月份'] = { text: month };
+      properties['备注'] = { text: note };
+
+      db.updateRecord({ databaseId: DATABASE_ID, recordId: editingId, properties: properties })
+        .then(function () {
+          msg.textContent = '保存成功，已同步到云端';
+          msg.className = 'modal-msg ok';
+          toast('修改已保存');
+          closeEdit();
+          // 若修改了月份，跳转到对应月份查看
+          if (month !== currentMonth) {
+            currentMonth = month;
+            $('monthSelect').value = month;
+          }
+          loadData();
+        })
+        .catch(function (err2) {
+          console.error('[database] 编辑保存失败:', err2);
+          err('保存失败，请稍后重试');
+        })
+        .finally(function () {
+          saveBtn.disabled = false;
+          saveBtn.textContent = '保存修改';
+        });
+    });
+  }
+
+  /* ===== 表单：本地缓存（DSDK008） ===== */
+  var FORM_FIELDS = ['company', 'taxItem', 'taxItemCustom', 'deadline', 'month', 'status', 'note'];
+  var cacheTimer = null;
+  function saveFormCache() {
+    if (cacheTimer) clearTimeout(cacheTimer);
+    cacheTimer = setTimeout(function () {
+      cacheTimer = null;
+      try {
+        var data = {};
+        for (var i = 0; i < FORM_FIELDS.length; i++) {
+          var el = document.querySelector('[name="' + FORM_FIELDS[i] + '"]');
+          if (el) data[FORM_FIELDS[i]] = el.value;
+        }
+        window.localStorage.setItem(FORM_CACHE_KEY, JSON.stringify(data));
+      } catch (e) { /* storage 不可用静默降级 */ }
+    }, 300);
+  }
+  function restoreFormCache() {
+    try {
+      var raw = window.localStorage.getItem(FORM_CACHE_KEY);
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      for (var i = 0; i < FORM_FIELDS.length; i++) {
+        var key = FORM_FIELDS[i];
+        var el = document.querySelector('[name="' + key + '"]');
+        if (el && data[key]) el.value = data[key];
+      }
+      syncTaxCustom('');
+    } catch (e) { /* 忽略损坏缓存 */ }
+  }
+  function clearFormCache() {
+    try { window.localStorage.removeItem(FORM_CACHE_KEY); } catch (e) {}
+  }
+  function bindFormCache() {
+    var form = $('addForm');
+    form.addEventListener('input', saveFormCache);
+    form.addEventListener('change', saveFormCache);
+  }
+
+  /* ===== 表单提交 ===== */
+  function bindSubmit() {
+    var form = $('addForm');
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      if (!guardEdit()) return;
+      var msg = $('formMsg');
+      msg.className = 'form-msg';
+
+      var company = document.querySelector('[name="company"]').value.trim();
+      var selTax = document.querySelector('[name="taxItem"]').value.trim();
+      var taxItem = selTax;
+      var fCustomEl = document.querySelector('[name="taxItemCustom"]');
+      if (selTax === '其他') taxItem = fCustomEl ? fCustomEl.value.trim() : '';
+      var deadline = document.querySelector('[name="deadline"]').value;
+      var month = document.querySelector('[name="month"]').value.trim();
+      var statusSel = document.querySelector('[name="status"]').value;
+      var note = document.querySelector('[name="note"]').value.trim();
+
+      if (!company) return showFormErr('请填写公司名称');
+      if (!selTax) return showFormErr('请选择税种事项');
+      if (selTax === '其他' && !taxItem) return showFormErr('请填写「其他」对应的具体税种名称');
+      if (!deadline) return showFormErr(TAX_CYCLE[taxItem] === 'manual' ? '该税种按次/按当地规定申报，请手动填写截止日期' : '请选择截止日期');
+      if (!/^\d{4}-\d{2}$/.test(month)) return showFormErr('所属月份格式应为 YYYY-MM，如 2026-09');
+
+      function showFormErr(t) {
+        msg.textContent = t;
+        msg.className = 'form-msg err';
+        return false;
+      }
+
+      if (!hasSDK) {
+        showFormErr('离线模式，暂无法保存，请从资料库打开本页面');
+        return;
+      }
+
+      var submitBtn = $('submitBtn');
+      submitBtn.disabled = true;
+      submitBtn.textContent = '提交中…';
+
+      var properties = {};
+      properties['公司名称'] = { text: company };
+      properties['税种事项'] = { text: taxItem };
+      properties['状态'] = { select: statusSel || statusId('未处理') };
+      properties['截止日期'] = { date: deadline };
+      properties['所属月份'] = { text: month };
+      properties['备注'] = { text: note };
+
+      db.addRecord({ databaseId: DATABASE_ID, properties: properties })
+        .then(function () {
+          msg.textContent = '添加成功！事项已同步到云端';
+          msg.className = 'form-msg ok';
+          toast('添加成功');
+          form.reset();
+          clearFormCache();
+          document.querySelector('[name="month"]').value = currentMonth || nowMonth();
+          var defOpt = statusId('未处理');
+          document.querySelector('[name="status"]').value = defOpt;
+          // 自动跳转到事项所属月份，方便立即查看
+          if (month !== currentMonth) {
+            currentMonth = month;
+            $('monthSelect').value = month;
+          }
+          loadData();
+        })
+        .catch(function (err) {
+          console.error('[database] 提交失败:', err);
+          showFormErr('提交失败，请稍后重试');
+        })
+        .finally(function () {
+          submitBtn.disabled = false;
+          var svg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+          submitBtn.innerHTML = svg + '添加事项';
+        });
+    });
+  }
+
+  /* ===== 月份切换 ===== */
+  function bindMonthNav() {
+    $('prevMonth').addEventListener('click', function () {
+      currentMonth = shiftMonth(currentMonth || nowMonth(), -1);
+      $('monthSelect').value = currentMonth;
+      updateCarryLabel();
+      renderStats();
+      renderCompanies();
+    });
+    $('nextMonth').addEventListener('click', function () {
+      currentMonth = shiftMonth(currentMonth || nowMonth(), 1);
+      $('monthSelect').value = currentMonth;
+      updateCarryLabel();
+      renderStats();
+      renderCompanies();
+    });
+    $('monthSelect').addEventListener('change', function () {
+      currentMonth = this.value; // '' = 全部月份
+      updateCarryLabel();
+      renderStats();
+      renderCompanies();
+    });
+    var cb = $('carryBtn');
+    if (cb) cb.addEventListener('click', carryForward);
+  }
+
+  /* 顺延按钮标签随当前查看月份变化 */
+  function updateCarryLabel() {
+    var btn = $('carryBtn');
+    if (!btn) return;
+    var src = currentMonth || nowMonth();
+    btn.textContent = '顺延 ' + src + ' 申报';
+  }
+
+  /* 各税种顺延的月份步长：月度/按次 +1，季度 +3（到下一季度末月） */
+  function taxAdvanceMonths(taxItem) {
+    return TAX_CYCLE[taxItem] === 'quarterly' ? 3 : 1;
+  }
+
+  /* 顺延申报：把当前查看月份的全部事项复制到各自下一申报期，截止日按新月份自动重算，旧月份保留 */
+  function carryForward() {
+    if (!guardEdit()) return;
+    if (!hasSDK) { toast('离线模式暂不支持顺延，请从资料库打开'); return; }
+    if (!SCHEMA_OPTIONS['状态']) { toast('数据加载中，请稍候再试'); return; }
+    var src = currentMonth || nowMonth();
+    var srcRows = [];
+    for (var i = 0; i < allRows.length; i++) {
+      if (String(allRows[i]['所属月份'] || '') === src) srcRows.push(allRows[i]);
+    }
+    if (!srcRows.length) { toast('「' + src + '」暂无事项可顺延'); return; }
+    var exist = {};
+    for (var j = 0; j < allRows.length; j++) {
+      var em = String(allRows[j]['所属月份'] || '');
+      if (em) exist[String(allRows[j]['公司名称'] || '') + '|' + String(allRows[j]['税种事项'] || '') + '|' + em] = true;
+    }
+    var tasks = [];
+    for (var k = 0; k < srcRows.length; k++) {
+      var r = srcRows[k];
+      var tax = String(r['税种事项'] || '');
+      var to = shiftMonth(src, taxAdvanceMonths(tax));
+      var key = String(r['公司名称'] || '') + '|' + tax + '|' + to;
+      if (exist[key]) continue;
+      var props = {
+        '公司名称': { text: r['公司名称'] || '' },
+        '税种事项': { text: tax },
+        '状态': { select: statusId('未处理') },
+        '所属月份': { text: to },
+        '备注': { text: r['备注'] || '' }
+      };
+      var dl = calcDeadline(tax, to);
+      if (dl) { props['截止日期'] = { date: dl.date }; }
+      // 手动/按次类无自动规则，不复制过期旧日期，留空由用户按新月份填写
+      tasks.push(props);
+    }
+    if (!tasks.length) { toast('下一申报期已包含全部相同事项，无需顺延'); return; }
+    if (!window.confirm('把「' + src + '」的 ' + tasks.length + ' 条事项顺延复制到各自下一申报期？月度税种顺延到下月、季度税种顺延到下季，截止日按征期自动重算，已存在的相同事项不会重复生成。')) return;
+    setSync('busy', '顺延中…');
+    var chain = Promise.resolve();
+    var fail = 0;
+    tasks.forEach(function (props) {
+      chain = chain.then(function () {
+        return db.addRecord({ databaseId: DATABASE_ID, properties: props }).catch(function () { fail++; });
+      });
+    });
+    chain.then(function () {
+      if (fail) toast('已顺延 ' + (tasks.length - fail) + ' 条，' + fail + ' 条失败');
+      else toast('已顺延 ' + tasks.length + ' 条到下一申报期');
+      setSync('ok', '已同步');
+      loadData();
+    });
+  }
+
+  /* ===== 视图切换（按公司 / 按税种） ===== */
+  function setViewButtons() {
+    var btnC = $('viewCompany'), btnT = $('viewTax');
+    if (!btnC || !btnT) return;
+    btnC.className = 'view-btn' + (viewMode === 'company' ? ' active' : '');
+    btnC.setAttribute('aria-selected', viewMode === 'company' ? 'true' : 'false');
+    btnT.className = 'view-btn' + (viewMode === 'tax' ? ' active' : '');
+    btnT.setAttribute('aria-selected', viewMode === 'tax' ? 'true' : 'false');
+    var title = $('coTitle');
+    if (title) title.textContent = (viewMode === 'tax') ? '税种申报总览' : '公司报税总览';
+  }
+
+  function switchView(mode) {
+    if (mode !== 'company' && mode !== 'tax') return;
+    if (mode === viewMode) { setViewButtons(); return; }
+    viewMode = mode;
+    try { window.localStorage.setItem('wb_tax_view_mode', viewMode); } catch (e) { /* 静默降级 */ }
+    setViewButtons();
+    renderCompanies();
+  }
+
+  function bindViewToggle() {
+    var btnC = $('viewCompany'), btnT = $('viewTax');
+    if (!btnC || !btnT) return;
+    btnC.addEventListener('click', function () { switchView('company'); });
+    btnT.addEventListener('click', function () { switchView('tax'); });
+    setViewButtons(); // 按 localStorage 记忆初始化按钮状态
+  }
+
+  /* ===== 导出 / 清空 ===== */
+  function bindFooter() {
+    $('exportBtn').addEventListener('click', function () {
+      if (!allRows.length) { toast('暂无数据可导出'); return; }
+      try {
+        var payload = {
+          exportTime: new Date().toISOString(),
+          title: '每月报税进度总览',
+          count: allRows.length,
+          records: allRows
+        };
+        var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = '报税进度备份_' + todayStr() + '.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        toast('已导出 ' + allRows.length + ' 条记录');
+      } catch (e) {
+        toast('导出失败，请重试');
+      }
+    });
+
+    $('clearBtn').addEventListener('click', function () {
+      if (!guardEdit()) return;
+      if (!allRows.length) { toast('当前没有数据'); return; }
+      if (!window.confirm('确定清空全部 ' + allRows.length + ' 条报税事项吗？清空后不可恢复，建议先导出 JSON 备份。')) return;
+      if (!hasSDK) { toast('离线模式，暂无法清空'); return; }
+      if (!window.confirm('再次确认：真的要清空全部数据吗？')) return;
+      var ids = [];
+      for (var i = 0; i < allRows.length; i++) ids.push(allRows[i]._id);
+      var chain = Promise.resolve();
+      var fail = 0;
+      ids.forEach(function (rid) {
+        chain = chain.then(function () {
+          return db.deleteRecord({ databaseId: DATABASE_ID, recordId: rid }).catch(function () { fail++; });
+        });
+      });
+      chain.then(function () {
+        toast(fail ? '已清空，' + fail + ' 条删除失败' : '已清空全部数据');
+        loadData();
+      });
+    });
+  }
+
+  /* ===== 启动 ===== */
+  bindModeSwitch();
+  bindMonthNav();
+  bindViewToggle();
+  bindSubmit();
+  bindFooter();
+  bindFormCache();
+  bindEdit();
+  bindAutoDeadline();
+  applyMode();
+  bindTodayCollapse();
+  var _g = document.getElementById('gate'); if (_g) _g.classList.add('hide');
+  var _al = document.getElementById('authLogin'); if (_al) _al.addEventListener('click', function () { authSubmit('login'); });
+  var _ar = document.getElementById('authReg'); if (_ar) _ar.addEventListener('click', function () { authSubmit('register'); });
+  var _ap = document.getElementById('authPwd'); if (_ap) _ap.addEventListener('keydown', function (e) { if (e.key === 'Enter') authSubmit('login'); });
+  var _au = document.getElementById('authUser'); if (_au) _au.addEventListener('keydown', function (e) { if (e.key === 'Enter') authSubmit('login'); });
+  ensureAuth(init);
+})();
+</script>
+
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <div class="auth-title">登录 / 注册</div>
+    <div class="auth-sub">报税工作台 · 使用工作台账号</div>
+    <input id="authUser" class="auth-input" placeholder="账号" autocomplete="username" />
+    <input id="authPwd" class="auth-input" type="password" placeholder="密码" autocomplete="current-password" />
+    <div id="authMsg" class="auth-msg"></div>
+    <button class="auth-btn" id="authLogin">登录</button>
+    <button class="auth-btn ghost" id="authReg">注册</button>
+  </div>
+</div>
+</body>
+</html>
