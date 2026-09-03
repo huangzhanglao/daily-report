@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>工作台 · 应用中心</title>
 <style>
   :root {
@@ -140,7 +140,7 @@
   .paste-table select { padding: 4px 6px; font-size: 12px; }
   .paste-empty { color: var(--muted); font-size: 13px; padding: 12px 0; }
   .modal-foot { padding: 14px 22px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
-  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1f2329; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .25s; z-index: 80; pointer-events: none; }
+  .toast { position: fixed; bottom: calc(24px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%) translateY(20px); background: #1f2329; color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px; opacity: 0; transition: .25s; z-index: 80; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   .footer-note { text-align: center; color: var(--muted); font-size: 12px; padding: 18px; }
   .img-preview { max-width: 100%; border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; }
@@ -251,6 +251,36 @@
   .auth-tab.active { background: var(--panel); color: var(--primary); font-weight: 600; box-shadow: var(--shadow); }
   #authErr { color: var(--danger); font-size: 12px; min-height: 16px; margin: 2px 0 8px; }
   #authSubmit { width: 100%; justify-content: center; }
+
+  /* ===== 移动端适配 ===== */
+  @media (max-width: 760px) {
+    header.topbar { flex-wrap: wrap; padding: 10px 12px; gap: 10px; }
+    .topbar .logo { margin-right: auto; }
+    .topbar .actions { width: 100%; order: 3; justify-content: flex-end; }
+    .topbar .actions .btn, .topbar .actions #userBox { white-space: nowrap; }
+    .tabs { padding: 0 10px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    main { padding: 12px 12px 60px; }
+    .toolbar { padding: 0; }
+    .search { min-width: 0; flex: 1 1 100%; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .md-split { grid-template-columns: 1fr; }
+    .md-input textarea, .md-preview { height: 340px; min-height: 300px; }
+    .row2 { grid-template-columns: 1fr; gap: 8px; }
+    .modal-mask { padding: 16px 10px; align-items: flex-end; }
+    .modal { border-radius: 16px 16px 0 0; max-width: 100%; }
+    .modal .modal-head, .modal .field { padding-left: 2px; padding-right: 2px; }
+    .center-hero { padding: 20px 18px; }
+    .center-hero h1 { font-size: 20px; }
+    .app-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+    .app-card { padding: 18px 16px; }
+    .app-icon { width: 52px; height: 52px; font-size: 26px; }
+    .app-name { font-size: 16px; }
+    .app-desc { font-size: 12px; }
+    .md-tools { overflow-x: auto; flex-wrap: nowrap; }
+    .bd-content img { max-width: 100%; height: auto; }
+    .panel-box, .panel { padding: 14px; }
+    .auth-card { padding: 20px; }
+  }
 </style>
 </head>
 <body>
