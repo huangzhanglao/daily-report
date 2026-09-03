@@ -1,0 +1,78 @@
+# ============================================================
+# 日报工作台 —— Docker Compose 编排
+#
+# 服务组成：
+#   app    FastAPI 应用（本镜像 Dockerfile 构建）
+#   redis  共享限流后端（REDIS_URL 指向它；Redis 不可达会自动回退内存限流）
+#   caddy  反向代理 + 自动 HTTPS（终止 TLS，注入 X-Forwarded-*）
+#
+# 用法：
+#   本地测试（Caddy 内部 CA）：
+#       APP_DOMAIN=localhost docker compose up -d --build
+#       访问 https://localhost （浏览器提示"不安全"属正常，自签性质）
+#   生产（真实域名自动 HTTPS）：
+#       APP_DOMAIN=your.com  docker compose up -d --build
+#       访问 https://your.com
+#   查看日志 / 停止：
+#       docker compose logs -f
+#       docker compose down
+# ============================================================
+
+name: daily-report
+
+services:
+  app:
+    build:
+      context: .            # 构建上下文 = 项目根（Dockerfile 位于根）
+      dockerfile: Dockerfile
+    image: daily-report:latest
+    # 仅容器内网可访问；公网流量一律走 caddy 反代，不直接暴露 app
+    expose:
+      - "8787"
+    environment:
+      # 数据目录指向命名卷挂载点；.secret 随卷持久化，重启不丢签名密钥
+      DATA_DIR: /app/data
+      # 反向代理（caddy）终止 TLS 后，应用据 X-Forwarded-Proto 下发 Secure cookie
+      # （此值仅影响应用内对"是否处于 TLS 下"的默认推断；caddy 会自动覆盖请求头）
+      PORT: "8787"
+      # 共享限流：指向 redis 服务（容器名解析）
+      REDIS_URL: redis://redis:6379/0
+      TZ: Asia/Shanghai        # 默认北京时间；若需 UTC 可去掉
+    volumes:
+      - app-data:/app/data
+    depends_on:
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    # 仅容器内网访问，不暴露到宿主机
+    # 数据用命名卷持久化（RDB/AOF 视 redis 默认配置）
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      # 本地测试端口：80 -> 443 由 Caddy 内部 CA 签发（localhost 场景走 443/80）
+      # 若宿主机 80/443 已被占用，可改成 8080:80 8443:443（见 README 端口覆盖说明）
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data    # 自动证书 / 内部 CA 状态落地
+      - caddy-config:/config
+    environment:
+      # 站点域名（必设）：本地填 localhost，生产填你的真实域名
+      APP_DOMAIN: ${APP_DOMAIN:-localhost}
+    depends_on:
+      - app
+    restart: unless-stopped
+
+volumes:
+  app-data:        # FastAPI 数据（app.db + .secret），持久化
+  redis-data:      # Redis 持久化
+  caddy-data:      # Caddy 自动证书 / 内部 CA 状态
+  caddy-config:    # Caddy 运行时配置

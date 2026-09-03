@@ -1,0 +1,39 @@
+# ============================================================
+# Caddyfile —— 容器版反向代理 + 自动 HTTPS
+# 由 docker-compose 挂载到 /etc/caddy/Caddyfile 使用。
+#
+# 关键点：
+#   - 通过 {$APP_DOMAIN} 环境变量注入站点域名（compose 里用 APP_DOMAIN 设定）
+#   - 反代目标是 compose 内的 app 服务（服务名 app，端口 8787），
+#     容器间用 Docker 内网 DNS 解析，比 127.0.0.1 更稳。
+#   - Caddy 自动设置 X-Forwarded-Proto / X-Forwarded-For，
+#     应用据此下发 Secure cookie 与 Strict-Transport-Security（无需改代码）。
+#
+# 用法：
+#   APP_DOMAIN=localhost  docker compose up -d      # 本地：Caddy 内部 CA，浏览器提示"不安全"属正常
+#   APP_DOMAIN=your.com  docker compose up -d       # 生产：Caddy 自动 ACME 申请并续期真实证书
+# ============================================================
+
+# 全局：ACME 邮箱（生产可填真实邮箱收续期告警；留空时 Caddy 用默认账号）
+{
+    # email admin@example.com
+}
+
+# 站点：域名来自 compose 的 APP_DOMAIN 环境变量
+{$APP_DOMAIN:localhost} {
+    # 把应用放在 HTTP/1.1 + HTTP/2 之后
+    encode gzip
+
+    # 反代到 compose 内网的应用容器
+    reverse_proxy app:8787
+
+    # 可选：限制上传体大小（记账/导入大 JSON 时按需放宽）
+    # request_body {
+    #     max_size 50MB
+    # }
+
+    # 日志（可选，去掉注释可把访问日志打到 stdout）
+    # log {
+    #     output stdout
+    # }
+}

@@ -1,0 +1,36 @@
+# ============================================================
+# Docker 构建上下文排除清单（放项目根，与 Dockerfile 同级）
+# 注意：data/ 含 .secret（token 签名密钥）与 app.db，绝不进镜像/上下文
+# ============================================================
+
+# 运行时数据与密钥
+data/
+*.log
+*.log.*
+
+# Git
+.git/
+.gitignore
+
+# Node / 旧服务（非 Python 侧，镜像不需要）
+node_modules/
+server.js
+package.json
+src_cache/
+daily-report-workbench.html
+
+# Python 缓存
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 部署参考文档（仅保留部署文件会用到的，如需可自行放行）
+# deploy/           <- Caddyfile/nginx 仅作参考，镜像内不装反代
+
+# 测试/临时脚本（不入镜像）
+_e2e*.py
+_split.py
+cj_l.txt
+_uvicorn*.log
+*.tmp
