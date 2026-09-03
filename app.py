@@ -785,19 +785,22 @@ def delete_report(rid: str, uid: str = Depends(require_uid)):
 @app.get("/api/blogs")
 def list_blogs(request: Request):
     scope = request.query_params.get("scope")
+    uid = get_uid(request.headers.get("Authorization", ""), request)
     conn = get_conn()
     try:
         rows = conn.execute("SELECT * FROM blogs ORDER BY created_at DESC").fetchall()
     finally:
         conn.close()
     blogs = [blog_public(b) for b in rows]
-    if scope == "public":
+    # 匿名用户只能看 public（即便显式带 scope=public 也强制过滤 private）
+    if scope == "public" or not uid:
         blogs = [b for b in blogs if b["visibility"] != "private"]
     return blogs
 
 
 @app.get("/api/blogs/{bid}")
-def blog_detail(bid: str):
+def blog_detail(bid: str, request: Request):
+    uid = get_uid(request.headers.get("Authorization", ""), request)
     conn = get_conn()
     try:
         b = conn.execute("SELECT * FROM blogs WHERE id=?", (bid,)).fetchone()
@@ -805,11 +808,14 @@ def blog_detail(bid: str):
         conn.close()
     if not b:
         raise HTTPException(404, "not found")
+    # private 博客对非登录用户不可见（避免匿名越权读取）
+    if b["visibility"] == "private" and not uid:
+        raise HTTPException(404, "not found")
     return {
         "id": b["id"], "title": b["title"], "summary": b["summary"], "content": b["content"],
         "category": b["category"], "tags": json.loads(b["tags"] or "[]"), "visibility": b["visibility"] or "public",
         "cover": b["cover"], "authorId": b["author_id"], "authorName": b["author_name"],
-        "createdAt": b["created_at"], "updatedAt": b["updatedAt"],
+        "createdAt": b["created_at"], "updatedAt": b["updated_at"],
     }
 
 
