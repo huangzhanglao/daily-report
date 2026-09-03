@@ -54,7 +54,7 @@ async def add_security_headers(request: Request, call_next):
 
 
 # ---------- 各应用路由 ----------
-from routes import auth, reports, finance, tax, mortgage, ledger, llm, admin
+from routes import auth, reports, finance, tax, mortgage, ledger, llm, admin, doc
 
 app.include_router(auth.router)
 app.include_router(reports.router)
@@ -64,6 +64,7 @@ app.include_router(mortgage.router)
 app.include_router(ledger.router)
 app.include_router(llm.router)
 app.include_router(admin.router)
+app.include_router(doc.router)
 
 
 # ---------- 健康检查 + 首页 ----------

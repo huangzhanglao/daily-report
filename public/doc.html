@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>AI 文档工作台</title>
+<style>
+  :root{
+    --bg:#f5f6fb; --panel:#ffffff; --ink:#22263a; --soft:#5b6478; --faint:#9aa3b5;
+    --line:#e9ecf4; --brand:#7c5cff; --brand-2:#a78bfa; --brand-soft:#f1edff;
+    --ok:#16a34a; --warn:#d97706; --err:#ef4444; --ok-soft:#e8f8ef; --err-soft:#fdeeee;
+    --radius:16px; --shadow:0 1px 2px rgba(30,20,80,.05),0 12px 30px rgba(30,20,80,.07);
+  }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; line-height:1.6; -webkit-font-smoothing:antialiased; min-height:100vh;}
+  button{font-family:inherit; cursor:pointer;}
+  input,textarea,select{font-family:inherit; font-size:14px; color:var(--ink);}
+  .wrap{max-width:880px; margin:0 auto; padding:0 14px 120px;}
+
+  /* 顶栏 */
+  .topbar{position:sticky; top:0; z-index:40; background:linear-gradient(135deg,#7c5cff,#a78bfa); color:#fff;
+    padding:14px 16px; display:flex; align-items:center; gap:12px; box-shadow:var(--shadow);}
+  .topbar .back{border:none; background:rgba(255,255,255,.2); color:#fff; width:34px; height:34px; border-radius:10px; font-size:18px; display:grid; place-items:center;}
+  .topbar .back:hover{background:rgba(255,255,255,.32);}
+  .topbar h1{font-size:17px; margin:0; font-weight:700; display:flex; align-items:center; gap:8px;}
+  .topbar .spacer{flex:1;}
+  .topbar .who{font-size:12px; opacity:.94; background:rgba(255,255,255,.2); padding:5px 11px; border-radius:999px; white-space:nowrap;}
+
+  /* 卡片 */
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px; margin-top:14px; box-shadow:var(--shadow);}
+  .card h2{font-size:14px; margin:0 0 12px; color:var(--soft); font-weight:700; display:flex; align-items:center; gap:7px;}
+  .card h2 .ic{font-size:16px;}
+  .hint{font-size:12px; color:var(--faint); margin-top:6px;}
+
+  /* 表单 */
+  .form-row{margin-bottom:12px;}
+  .form-row label{display:block; font-size:12px; color:var(--soft); font-weight:600; margin-bottom:5px;}
+  .form-row select,.form-row input[type=text]{width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:11px; background:#fff; font-size:14px;}
+  .form-row select:focus,.form-row input:focus,.form-row textarea:focus{outline:none; border-color:var(--brand); box-shadow:0 0 0 3px var(--brand-soft);}
+  .form-row textarea{width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:11px; resize:vertical; min-height:74px; line-height:1.55;}
+  .form-row textarea.material{min-height:110px;}
+  .type-hint{font-size:12px; color:var(--faint); margin-top:5px; min-height:16px;}
+
+  /* 文体下拉徽章 */
+  .types-wrap{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;}
+  .types-wrap .tchip{display:flex; align-items:center; gap:5px; padding:7px 12px; border:1px solid var(--line); border-radius:999px;
+    background:#fff; color:var(--soft); font-size:13px; transition:all .15s;}
+  .types-wrap .tchip:hover{border-color:var(--brand);}
+  .types-wrap .tchip.active{background:var(--brand); border-color:var(--brand); color:#fff; box-shadow:0 4px 12px rgba(124,92,255,.35);}
+
+  /* 素材：粘贴 + 上传 */
+  .mat-actions{display:flex; gap:10px; align-items:center; margin-top:8px; flex-wrap:wrap;}
+  .upbtn{display:inline-flex; align-items:center; gap:6px; border:1px dashed var(--brand); color:var(--brand); background:var(--brand-soft);
+    padding:8px 13px; border-radius:10px; font-size:13px; font-weight:600;}
+  .upbtn:hover{background:#e5ddff;}
+  .fileinfo{font-size:12px; color:var(--ok); display:flex; align-items:center; gap:6px;}
+  .fileinfo .x{cursor:pointer; color:var(--err); font-weight:700; padding:0 4px;}
+  .fileinfo .x:hover{opacity:.7;}
+
+  /* 主按钮 */
+  .genbtn{display:flex; align-items:center; justify-content:center; gap:8px; width:100%; padding:13px; border:none; border-radius:13px;
+    background:linear-gradient(135deg,#7c5cff,#a78bfa); color:#fff; font-size:15px; font-weight:700; box-shadow:0 8px 20px rgba(124,92,255,.35);}
+  .genbtn:hover{filter:brightness(1.05);}
+  .genbtn:disabled{opacity:.6; cursor:not-allowed; box-shadow:none;}
+  .genbtn .spin{width:16px; height:16px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:sp 1s linear infinite;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+
+  /* 阶段进度 */
+  .steps{display:none; margin-top:14px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow);}
+  .steps.show{display:block;}
+  .steps .st-title{font-size:13px; color:var(--soft); margin-bottom:12px; font-weight:700;}
+  .st{display:flex; align-items:center; gap:10px; padding:7px 0; color:var(--faint);}
+  .st .dot{width:20px; height:20px; border-radius:50%; background:var(--line); display:grid; place-items:center; font-size:11px; color:#fff; flex:none;}
+  .st .lb{font-size:13px; flex:1;}
+  .st.pending .lb{color:var(--faint);}
+  .st.running{color:var(--ink);} .st.running .lb{color:var(--brand); font-weight:600;}
+  .st.running .dot{background:var(--brand); animation:pulse 1.2s infinite;}
+  .st.done{color:var(--ink);} .st.done .dot{background:var(--ok);}
+  .st.done .lb{color:var(--ink);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+
+  /* 结果区 */
+  .result{display:none;}
+  .result.show{display:block;}
+  .res-head{display:flex; align-items:center; gap:8px; margin-top:14px; flex-wrap:wrap;}
+  .res-head .rt{font-size:16px; font-weight:800; flex:1; min-width:120px; word-break:break-all;}
+  .res-tab{display:flex; gap:4px; background:var(--panel); border:1px solid var(--line); border-radius:11px; padding:3px; margin-top:12px; flex-wrap:wrap;}
+  .res-tab button{border:none; background:transparent; padding:7px 13px; border-radius:9px; font-size:13px; color:var(--soft); font-weight:600;}
+  .res-tab button.active{background:var(--brand); color:#fff;}
+  .res-body{margin-top:12px;}
+  .docbox{display:none; background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:18px 18px; box-shadow:var(--shadow); white-space:pre-wrap; word-break:break-word; line-height:1.75; font-size:14px; min-height:120px;}
+  .docbox.show{display:block;}
+  .docbox.critique{background:#fffbeb; border-color:#fde68a;}
+  .docbox .ttl{font-size:12px; color:var(--faint); margin-bottom:8px; font-weight:600;}
+
+  /* 操作按钮组 */
+  .actbar{display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;}
+  .btn{padding:9px 15px; border-radius:10px; border:1px solid var(--line); background:#fff; color:var(--soft); font-size:13px; font-weight:600; display:inline-flex; align-items:center; gap:6px;}
+  .btn:hover{border-color:var(--brand); color:var(--brand);}
+  .btn.primary{background:var(--brand); border-color:var(--brand); color:#fff;}
+  .btn.primary:hover{filter:brightness(1.05);}
+  .btn.danger{color:var(--err);} .btn.danger:hover{border-color:var(--err); color:var(--err); background:var(--err-soft);}
+  .btn:disabled{opacity:.55; cursor:not-allowed;}
+
+  /* 历史 */
+  .his-title{margin-top:22px; display:flex; align-items:center; gap:8px; font-size:14px; font-weight:700; color:var(--soft);}
+  .his-title .cnt{font-size:12px; color:var(--faint); font-weight:400;}
+  .his-list{margin-top:8px;}
+  .his-item{display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:12px 14px; margin-bottom:8px; box-shadow:var(--shadow); cursor:pointer; transition:border-color .15s;}
+  .his-item:hover{border-color:var(--brand);}
+  .his-item .ic{width:36px; height:36px; border-radius:10px; background:var(--brand-soft); display:grid; place-items:center; font-size:17px; flex:none;}
+  .his-item .mid{flex:1; min-width:0;}
+  .his-item .mid .t{font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .his-item .mid .n{font-size:12px; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .his-item .del{border:none; background:transparent; color:var(--faint); font-size:17px; padding:4px 8px; border-radius:8px; flex:none;}
+  .his-item .del:hover{background:var(--err-soft); color:var(--err);}
+  .empty{color:var(--faint); text-align:center; padding:26px 10px; font-size:13px;}
+
+  .toast{position:fixed; left:50%; bottom:calc(40px + env(safe-area-inset-bottom)); transform:translateX(-50%) translateY(20px); background:rgba(30,30,50,.92); color:#fff;
+    padding:10px 18px; border-radius:999px; font-size:13px; z-index:99; opacity:0; pointer-events:none; transition:all .25s; max-width:86vw; text-align:center;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  /* 移动端 */
+  @media(max-width:560px){
+    .res-tab button{flex:1;}
+    .docbox{padding:14px 12px; font-size:13.5px;}
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <button class="back" onclick="goHome()">←</button>
+  <h1>✍️ AI 文档工作台</h1>
+  <span class="spacer"></span>
+  <span class="who" id="who">…</span>
+</header>
+
+<div class="wrap">
+
+  <!-- 写作表单 -->
+  <div class="card">
+    <h2><span class="ic">🪄</span>新建写作任务</h2>
+    <div class="form-row">
+      <label>① 选择文体（决定写作风格与结构）</label>
+      <div class="types-wrap" id="typesWrap"></div>
+      <input type="hidden" id="docType" value="general" />
+      <div class="type-hint" id="typeHint"></div>
+    </div>
+    <div class="form-row">
+      <label>② 文档标题 / 主题</label>
+      <input type="text" id="docTitle" placeholder="如：《关于开展2026年度…专项检查的报告》或"xx公司Q3工作总结"" />
+    </div>
+    <div class="form-row">
+      <label>③ 写作需求（越具体越好，AI 会严格遵循）</label>
+      <textarea id="docReq" placeholder="例如：写一份关于推进数字化转型的工作总结，重点突出三个方面成效，用数据说话，篇幅1000字左右，语气正式…"></textarea>
+    </div>
+    <div class="form-row">
+      <label>④ 参考素材（可选）—— 粘贴一段文字，或上传文件</label>
+      <textarea class="material" id="docMaterial" placeholder="把已有的零散材料、要点、数据贴在这里，AI 会作为写作素材参考…"></textarea>
+      <div class="mat-actions">
+        <button class="upbtn" id="upBtn">📎 上传文件（.txt/.md/.docx/.pdf）</button>
+        <span class="fileinfo" id="fileInfo" style="display:none"></span>
+        <input type="file" id="fileInput" accept=".txt,.md,.docx,.pdf" style="display:none" />
+      </div>
+      <div class="hint">素材可不填；若上传 .docx / .pdf 由服务端自动抽取文字。</div>
+    </div>
+    <button class="genbtn" id="genBtn"><span id="genTxt">✨ 开始写作（AI 初稿 → 反思 → 改写）</span></button>
+  </div>
+
+  <!-- 阶段进度 -->
+  <div class="steps" id="steps">
+    <div class="st-title">写作进度</div>
+    <div class="st" id="st1"><span class="dot">1</span><span class="lb">生成初稿：按文体要求起草</span></div>
+    <div class="st" id="st2"><span class="dot">2</span><span class="lb">反思审稿：AI 审稿人找问题</span></div>
+    <div class="st" id="st3"><span class="dot">3</span><span class="lb">反思改写：落实意见产出终稿</span></div>
+  </div>
+
+  <!-- 结果区 -->
+  <div class="result" id="result">
+    <div class="res-head">
+      <span class="rt" id="resTitle">📄 文档</span>
+      <button class="btn primary" id="copyBtn" style="flex:none">📋 复制终稿</button>
+    </div>
+    <div class="res-tab" id="resTab">
+      <button data-v="final" class="active">✅ 终稿</button>
+      <button data-v="critique">🔍 反思意见</button>
+      <button data-v="draft">📝 初稿</button>
+    </div>
+    <div class="res-body">
+      <div class="docbox show" id="boxFinal"></div>
+      <div class="docbox critique" id="boxCritique"></div>
+      <div class="docbox" id="boxDraft"></div>
+    </div>
+    <div class="actbar">
+      <button class="btn" id="dlBtn">⬇️ 导出 .txt</button>
+      <button class="btn" id="regenBtn">🔁 再反思打磨一版</button>
+      <button class="btn danger" id="delBtn">🗑️ 删除这篇</button>
+    </div>
+    <div class="hint" id="resMeta"></div>
+  </div>
+
+  <!-- 历史列表 -->
+  <div class="his-title" id="hisTitle" style="display:none">📚 我的文档 <span class="cnt" id="hisCnt"></span></div>
+  <div class="his-list" id="hisList"></div>
+  <div class="empty" id="hisEmpty" style="display:none">还没有写过的文档，从上面新建一篇吧～</div>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  function $(id){ return document.getElementById(id); }
+  function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+  function api(method, path, body){
+    var opts={method:method, headers:{}};
+    if(body!==undefined && !(body instanceof FormData)){ opts.headers["Content-Type"]="application/json"; opts.body=JSON.stringify(body); }
+    else if(body instanceof FormData){ opts.body=body; }
+    return fetch(path, opts).then(function(r){ return r.json().then(function(d){return {status:r.status,data:d};}).catch(function(){return {status:r.status,data:{}};}); });
+  }
+  function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove("show"); },2300); }
+  function goHome(){ location.href="index.html"; }
+
+  var state={ types:[], doc_id:null, current:null, busy:false };
+
+  /* ---------- 文体下拉 ---------- */
+  function loadTypes(){
+    api("GET","/api/doc/types").then(function(r){
+      if(r.status!==200){ return; }
+      state.types=r.data.types||[];
+      renderTypes();
+    });
+  }
+  function renderTypes(){
+    var w=$("typesWrap"); w.innerHTML="";
+    state.types.forEach(function(t){
+      var b=document.createElement("button"); b.className="tchip"+(t.key==="general"?" active":"");
+      b.innerHTML=t.icon+" "+esc(t.name); b.onclick=function(){ selectType(t.key); };
+      w.appendChild(b);
+    });
+    updateTypeHint();
+  }
+  function selectType(key){
+    $("docType").value=key;
+    var chips=$("typesWrap").querySelectorAll(".tchip");
+    for(var i=0;i<chips.length;i++){ chips[i].classList.remove("active"); }
+    chips[keyToIndex(key)].classList.add("active");
+    updateTypeHint();
+  }
+  function keyToIndex(key){ for(var i=0;i<state.types.length;i++){ if(state.types[i].key===key) return i; } return 0; }
+  function updateTypeHint(){
+    var key=$("docType").value; var t=null;
+    for(var i=0;i<state.types.length;i++){ if(state.types[i].key===key) t=state.types[i]; }
+    $("typeHint").textContent = t ? t.short : "";
+  }
+
+  /* ---------- 素材上传 ---------- */
+  function bindUpload(){
+    $("upBtn").onclick=function(){ $("fileInput").click(); };
+    $("fileInput").onchange=function(){
+      var f=this.files[0]; if(!f){ return; }
+      var fd=new FormData(); fd.append("file", f);
+      $("upBtn").style.opacity=.6; $("upBtn").textContent="解析中…";
+      api("POST","/api/doc/upload", fd).then(function(r){
+        $("upBtn").style.opacity=1; $("upBtn").innerHTML="📎 上传文件（.txt/.md/.docx/.pdf）";
+        if(r.status!==200){ toast(r.data.error||"解析失败"); return; }
+        var d=r.data;
+        if($("docMaterial").value && !confirm("是否用上传文件内容覆盖已粘贴的素材？")){ return; }
+        $("docMaterial").value=d.text;
+        $("fileInfo").style.display="inline-flex";
+        $("fileInfo").innerHTML="✅ 已读取 <b>"+esc(d.name)+"</b>（"+d.chars+"字）<span class='x' id='clearMat'>✕</span>";
+        $("clearMat").onclick=function(){ $("docMaterial").value=""; $("fileInfo").style.display="none"; };
+        toast("已抽取 "+d.chars+" 字素材");
+      });
+    };
+  }
+
+  /* ---------- 阶段进度显示 ---------- */
+  function setStep(idx,status){ // idx 1..3
+    var el=$("st"+idx);
+    el.className="st "+status;
+    if(status==="done"){ el.querySelector(".dot").textContent="✓"; }
+  }
+  function resetSteps(){
+    for(var i=1;i<=3;i++){ setStep(i,"pending"); $("st"+i).querySelector(".dot").textContent=i; }
+    $("steps").classList.remove("show");
+  }
+  function showSteps(){ $("steps").classList.add("show"); resetSteps(); }
+
+  /* ---------- 开始写作 ---------- */
+  function genBtn(){
+    if(state.busy) return;
+    var doc_type=$("docType").value, title=$("docTitle").value.trim(), requirement=$("docReq").value.trim(), material=$("docMaterial").value.trim();
+    if(!title && !requirement){ toast("请先填标题或写作需求"); return; }
+    state.busy=true; disableGen(true,"正在写作…");
+    showSteps();
+    setStep(1,"running");
+    api("POST","/api/doc/generate",{doc_type:doc_type,title:title,requirement:requirement,material:material,doc_id:state.doc_id})
+    .then(function(r){
+      setStep(1,"done");
+      if(r.status!==200){ setStep(1,"pending"); toast(r.data.error||"写作失败"); state.busy=false; disableGen(false,"✨ 开始写作"); return; }
+      // 轮询式前端时序处理：由于接口一次返回三步结果，这里直接按序展示
+      var d=r.data;
+      setTimeout(function(){ setStep(2,"done"); setStep(3,"done"); },200);
+      state.doc_id=d.id;
+      var t = d.title || title || "未命名文档";
+      loadDetail(d.id, true, t);
+      loadHistory();
+    })
+    .catch(function(){ toast("网络错误"); state.busy=false; disableGen(false,"✨ 开始写作"); });
+  }
+
+  function disableGen(dis, txt){ var g=$("genBtn"); g.disabled=dis; g.innerHTML=dis?('<span class="spin"></span><span>'+txt+'</span>') : txt; }
+  function enableGen(){ state.busy=false; disableGen(false,'✨ 开始写作'); }
+
+  /* ---------- 结果区渲染 ---------- */
+  var view="final";
+  function bindResTab(){
+    var tabs=$("resTab").querySelectorAll("button");
+    for(var i=0;i<tabs.length;i++){ tabs[i].onclick=function(){ switchView(this.getAttribute("data-v")); }; }
+  }
+  function switchView(v){
+    view=v;
+    var tabs=$("resTab").querySelectorAll("button");
+    for(var i=0;i<tabs.length;i++){ tabs[i].classList.toggle("active",tabs[i].getAttribute("data-v")===v); }
+    $("boxFinal").classList.toggle("show",v==="final");
+    $("boxCritique").classList.toggle("show",v==="critique");
+    $("boxDraft").classList.toggle("show",v==="draft");
+  }
+
+  function loadDetail(id, jump, fallbackTitle){
+    api("GET","/api/doc/docs/"+encodeURIComponent(id)).then(function(r){
+      if(r.status!==200){ toast("加载文档失败"); enableGen(); return; }
+      state.current=r.data; state.doc_id=id;
+      $("resTitle").textContent="📄 "+ (r.data.title||fallbackTitle||"文档");
+      $("boxFinal").textContent = r.data.final || "(终稿为空)";
+      $("boxCritique").textContent= r.data.critique || "(暂无反思意见)";
+      $("boxDraft").textContent  = r.data.draft || "(暂无初稿)";
+      $("result").classList.add("show");
+      var ty=getTypeName(r.data.doc_type);
+      $("resMeta").textContent="文体："+ty+"　·　生成于 "+fmtTime(r.data.createdAt);
+      if(r.data.status==="drafting"){ /* 理论上接口同步返回，不会出现 */ }
+      if(jump){ $("result").scrollIntoView({behavior:"smooth",block:"start"}); }
+      enableGen();
+      highlightCurrent(id);
+    });
+  }
+  function getTypeName(key){ for(var i=0;i<state.types.length;i++){ if(state.types[i].key===key) return state.types[i].name; } return key||"自由写作"; }
+  function fmtTime(ts){ var d=new Date(ts||Date.now()); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+
+  /* ---------- 操作 ---------- */
+  function copyFinal(){
+    if(!state.current){ return; }
+    var t=view==="final"?state.current.final:(view==="critique"?state.current.critique:state.current.draft);
+    if(!t){ toast("无可复制内容"); return; }
+    (navigator.clipboard?navigator.clipboard.writeText(t):new Promise(function(ok){ var ta=document.createElement("textarea"); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove(); ok(); }))
+      .then(function(){ toast("已复制到剪贴板"); },function(){ toast("复制失败"); });
+  }
+  function download(){
+    if(!state.current) return;
+    var name=(state.current.title||"文档")+".txt";
+    var blob=new Blob([state.current.final||""],{type:"text/plain;charset=utf-8"});
+    var a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name; a.click();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); },200);
+  }
+  function regen(){
+    if(!state.current || state.busy) return;
+    if(!confirm("基于现有终稿再反思打磨一轮？会覆盖反思意见与终稿（保留原初稿）。")) return;
+    state.busy=true; showSteps(); resetSteps();
+    setStep(1,"done"); setStep(2,"running");
+    api("POST","/api/doc/docs/"+encodeURIComponent(state.doc_id)+"/regenerate",{}).then(function(r){
+      if(r.status!==200){ toast(r.data.error||"打磨失败"); setStep(2,"pending"); state.busy=false; return; }
+      setStep(2,"done"); setStep(3,"done");
+      setTimeout(function(){ loadDetail(state.doc_id,true); toast("已重新打磨"); },250);
+    }).catch(function(){ toast("网络错误"); state.busy=false; });
+  }
+  function delDoc(){
+    if(!state.current) return;
+    if(!confirm("确定删除这篇文档？此操作不可恢复。")) return;
+    api("DELETE","/api/doc/docs/"+encodeURIComponent(state.doc_id)).then(function(r){
+      if(r.status!==200){ toast(r.data.error||"删除失败"); return; }
+      state.current=null; state.doc_id=null; $("result").classList.remove("show");
+      toast("已删除"); loadHistory();
+    });
+  }
+
+  /* ---------- 历史列表 ---------- */
+  function loadHistory(){
+    api("GET","/api/doc/docs").then(function(r){
+      if(r.status!==200){ return; }
+      var items=r.data.items||[], total=r.data.total||items.length;
+      if(!items.length){ $("hisEmpty").style.display="block"; $("hisTitle").style.display="none"; $("hisList").innerHTML=""; return; }
+      $("hisEmpty").style.display="none"; $("hisTitle").style.display="flex";
+      $("hisCnt").textContent="（"+total+"篇）";
+      renderHistory(items);
+    });
+  }
+  function renderHistory(items){
+    var l=$("hisList"); l.innerHTML="";
+    items.forEach(function(it){
+      var d=document.createElement("div"); d.className="his-item"; d.style.borderColor = (state.doc_id===it.id)?"var(--brand)":"";
+      d.innerHTML=
+        '<div class="ic">'+getTypeIcon(it.doc_type)+'</div>'+
+        '<div class="mid"><div class="t">'+esc(it.title||"未命名文档")+'</div>'+
+        '<div class="n">'+esc(getTypeName(it.doc_type))+' · '+fmtTime(it.createdAt)+'</div></div>'+
+        '<button class="del" title="删除">🗑</button>';
+      var mid=d.querySelector(".mid");
+      mid.onclick=function(){ state.doc_id=it.id; if(state.busy) return; $("result").classList.remove("show"); showSteps(); resetSteps(); loadDetail(it.id,true); };
+      d.querySelector(".del").onclick=function(ev){ ev.stopPropagation(); confirmDel(it); };
+      l.appendChild(d);
+    });
+  }
+  function highlightCurrent(id){
+    var items=$("hisList").querySelectorAll(".his-item");
+    for(var i=0;i<items.length;i++){ items[i].style.borderColor = (state.doc_id===id)?"var(--brand)":""; }
+  }
+  function confirmDel(it){
+    if(!confirm("确定删除「"+(it.title||"未命名文档")+"」？")) return;
+    api("DELETE","/api/doc/docs/"+encodeURIComponent(it.id)).then(function(r){
+      if(r.status!==200){ toast(r.data.error||"删除失败"); return; }
+      if(state.doc_id===it.id){ state.doc_id=null; state.current=null; $("result").classList.remove("show"); }
+      toast("已删除"); loadHistory();
+    });
+  }
+  function getTypeIcon(key){ for(var i=0;i<state.types.length;i++){ if(state.types[i].key===key) return state.types[i].icon; } return "📄"; }
+
+  /* ---------- 按钮绑定 ---------- */
+  function bindActions(){
+    $("genBtn").onclick=genBtn;
+    $("copyBtn").onclick=copyFinal;
+    $("dlBtn").onclick=download;
+    $("regenBtn").onclick=regen;
+    $("delBtn").onclick=delDoc;
+  }
+
+  /* ---------- 初始化 ---------- */
+  function init(){
+    api("GET","/api/auth/me").then(function(res){
+      if(res.status!==200 || !res.data.user){ location.href="index.html"; return; }
+      var u=res.data.user; $("who").textContent=(u.displayName||u.username);
+      bindResTab(); bindUpload(); bindActions(); resetSteps();
+      loadTypes(); loadHistory();
+    }).catch(function(){ location.href="index.html"; });
+  }
+  init();
+})();
+</script>
+</body>
+</html>
