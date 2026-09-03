@@ -1694,15 +1694,15 @@
     hideAuth(); setNet(); reload(); goCenter();
   }).catch(function(err){
     if (err && err.status === 0){
+      // 后端不可达：离线降级模式（无法验证身份，允许本地使用）
       MODE = "local"; USER=null; hideAuth(); setNet(); reload(); goCenter();
     } else {
+      // 后端可达但未登录：整站强制登录——不渲染主页，仅显示登录页
       MODE = "server"; USER=null;
       localStorage.removeItem(USER_KEY);
-      hideAuth(); setNet();
-      // 未登录：博客系统默认看「公开」笔记
-      noteState.filter = "public";
-      document.querySelectorAll("#noteSeg button").forEach(function(x){ x.classList.toggle("active", x.getAttribute("data-nf")==="public"); });
-      goCenter();
+      setNet();
+      showAuth();
+      // 注意：不调用 goCenter()/reload()，主页内容保持隐藏，登录成功后再进入
     }
   });
 })();

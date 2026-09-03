@@ -1153,34 +1153,33 @@ def app_row_to_dict(r):
 
 
 @app.get("/api/apps")
-def list_visible_apps(authorization: str = Header(default="")):
-    """当前用户可见的应用。已登录按权限过滤（未显式收回的已启用应用均可见）；匿名返回全部已启用应用（预览）。"""
-    uid = get_uid(authorization)
+def list_visible_apps(uid: str = Depends(require_uid)):
+    """当前登录用户可见的应用（按权限过滤）。需登录，避免匿名暴露模块清单。"""
     conn = get_conn()
     try:
-        if uid:
-            rows = conn.execute(
-                "SELECT c.* FROM app_catalog c LEFT JOIN user_app_perm p ON p.app_key=c.key AND p.user_id=? "
-                "WHERE c.enabled=1 AND (p.granted IS NULL OR p.granted=1) ORDER BY c.sort ASC, c.name ASC",
-                (uid,),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT * FROM app_catalog WHERE enabled=1 ORDER BY sort ASC, name ASC"
-            ).fetchall()
+        rows = conn.execute(
+            "SELECT c.* FROM app_catalog c LEFT JOIN user_app_perm p ON p.app_key=c.key AND p.user_id=? "
+            "WHERE c.enabled=1 AND (p.granted IS NULL OR p.granted=1) ORDER BY c.sort ASC, c.name ASC",
+            (uid,),
+        ).fetchall()
     finally:
         conn.close()
     return {"apps": [app_row_to_dict(r) for r in rows]}
 
 
 @app.get("/api/settings")
-def get_settings():
+def get_settings(authorization: str = Header(default=""), request: Request = None):
+    uid = get_uid(authorization, request)
     conn = get_conn()
     try:
         rows = conn.execute("SELECT key,value FROM settings_meta").fetchall()
     finally:
         conn.close()
-    return {"settings": {r["key"]: r["value"] for r in rows}}
+    settings = {r["key"]: r["value"] for r in rows}
+    if not uid:
+        # 匿名仅暴露 allow_register（注册流程需判断是否开放注册），其余设置需登录后可见
+        return {"settings": {"allow_register": settings.get("allow_register", "0")}}
+    return {"settings": settings}
 
 
 # ---------- 应用管理 ----------
