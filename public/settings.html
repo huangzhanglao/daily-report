@@ -83,6 +83,7 @@
   <button class="tab" data-tab="perms">权限管理</button>
   <button class="tab" data-tab="users">用户管理</button>
   <button class="tab" data-tab="guide">操作说明</button>
+  <button class="tab" data-tab="llm">大模型配置</button>
 </nav>
 
 <main class="wrap" id="mainWrap">
@@ -130,6 +131,17 @@
       <label style="margin:0">允许公开注册（关闭后，新用户只能由管理员在「用户管理」中创建）</label>
     </div>
     <div class="hint">支持纯文本，换行即分段。保存后立即对所有用户生效。</div>
+  </section>
+
+  <!-- 大模型配置（所有登录用户可用；管理员额外可见上方管理标签） -->
+  <section class="panel" id="tab-llm" style="display:none">
+    <div class="panel-head">
+      <h2>大模型配置</h2>
+      <div class="spacer"></div>
+      <button class="btn primary" id="btnNewLLM">＋ 新增模型配置</button>
+    </div>
+    <div class="hint" style="margin-bottom:14px">接入任意 OpenAI 兼容服务（OpenAI / 硅基流动 / 通义千问 / 智谱 / DeepSeek / 本地 Ollama 等）：填写 Base URL、API Key 与模型名。密钥仅保存在服务端、列表内脱敏展示；后续上架的大模型应用将自动调用这里的配置。</div>
+    <div id="llmTableWrap"><div class="empty">加载中…</div></div>
   </section>
 </main>
 
@@ -180,6 +192,24 @@
   </div>
 </div>
 
+  <!-- 大模型配置弹窗 -->
+  <div class="modal-mask" id="llmModal">
+    <div class="modal">
+      <div style="display:flex;align-items:center"><h3 id="llmModalTitle">新增模型配置</h3><button class="x" data-close="llmModal">×</button></div>
+      <div class="field"><label>配置名称</label><input id="llmName" placeholder="如 硅基流动 / OpenAI / 通义千问"></div>
+      <div class="field"><label>Base URL（OpenAI 兼容）</label><input id="llmBase" placeholder="https://api.siliconflow.cn/v1"></div>
+      <div class="field"><label>API Key</label><input id="llmKey" type="password" placeholder="sk-..." autocomplete="off">
+        <div class="hint"><label style="display:flex;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="llmShowKey" style="width:auto"> 显示密钥</label></div></div>
+      <div class="field"><label>模型名称</label><input id="llmModel" placeholder="如 Qwen/Qwen2.5-7B-Instruct 或 gpt-4o-mini"></div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><input id="llmDefault" type="checkbox" style="width:auto"> 设为默认配置（对话类应用优先使用该配置）</label>
+      <div class="modal-foot">
+        <button class="btn ghost" id="btnTestLLM">测试连接</button>
+        <button class="btn ghost" data-close="llmModal">取消</button>
+        <button class="btn primary" id="btnSaveLLM">保存</button>
+      </div>
+    </div>
+  </div>
+
 <div id="toast"></div>
 
 <script>
@@ -208,11 +238,24 @@
   /* ---------- 初始化：校验管理员权限（token 由 HttpOnly cookie 携带，直接请求 /api/auth/me） ---------- */
   function init(){
     api("GET","/api/auth/me").then(function(res){
-      if (res.status !== 200 || !res.data.user || res.data.user.role !== "admin"){ showGate("未登录或无权限：管理中心仅对管理员开放，请先在应用中心登录。"); return; }
+      if (res.status !== 200 || !res.data.user){ location.href="index.html"; return; }
       USER = res.data.user; localStorage.setItem(USER_KEY, JSON.stringify(USER));
-      $("who").textContent = "当前：" + (USER.displayName || USER.username) + "（管理员）";
-      loadApps(); loadPerms(); loadUsers(); loadGuide();
-    }).catch(function(){ showGate("无法连接服务端，请确认服务已启动。"); });
+      var isAdmin = USER.role === "admin";
+      if (isAdmin){
+        $("who").textContent = "当前：" + (USER.displayName || USER.username) + "（管理员）";
+        ["apps","perms","users","guide"].forEach(function(n){ $("tab-"+n).style.display=""; });
+      } else {
+        $("who").textContent = "当前：" + (USER.displayName || USER.username);
+        ["apps","perms","users","guide"].forEach(function(n){
+          $("tab-"+n).style.display="none";
+          var tb=document.querySelector('#navTabs .tab[data-tab="'+n+'"]'); if(tb) tb.style.display="none";
+        });
+        document.querySelectorAll("#navTabs .tab").forEach(function(x){ x.classList.toggle("active", x.getAttribute("data-tab")==="llm"); });
+        $("tab-llm").style.display="";
+      }
+      loadLLM();
+      if (isAdmin){ loadApps(); loadPerms(); loadUsers(); loadGuide(); }
+    }).catch(function(){ location.href="index.html"; });
   }
 
   /* ---------- 标签切换 ---------- */
@@ -220,11 +263,12 @@
     var t = e.target.closest(".tab"); if(!t) return;
     var name = t.getAttribute("data-tab");
     document.querySelectorAll("#navTabs .tab").forEach(function(x){ x.classList.toggle("active", x===t); });
-    ["apps","perms","users","guide"].forEach(function(n){ $("tab-"+n).style.display = (n===name) ? "" : "none"; });
+    ["apps","perms","users","guide","llm"].forEach(function(n){ $("tab-"+n).style.display = (n===name) ? "" : "none"; });
     if (name==="apps") loadApps();
     if (name==="perms") loadPerms();
     if (name==="users") loadUsers();
     if (name==="guide") loadGuide();
+    if (name==="llm") loadLLM();
   };
 
   /* ---------- 应用管理 ---------- */
@@ -408,6 +452,84 @@
   document.querySelectorAll(".modal-mask").forEach(function(m){ m.onclick = function(e){ if (e.target===m) m.classList.remove("open"); }; });
   $("btnHome").onclick = function(){ location.href = "index.html"; };
   $("btnLogout").onclick = logout;
+
+  /* ---------- 大模型配置（每个用户可接入自己的 OpenAI 兼容服务） ---------- */
+  var editingLLMId = null;
+  function loadLLM(){
+    api("GET","/api/llm/providers").then(function(res){
+      if (res.status !== 200){ $("llmTableWrap").innerHTML='<div class="empty">加载失败</div>'; return; }
+      var ps = res.data.providers || [];
+      if (!ps.length){ $("llmTableWrap").innerHTML='<div class="empty">还没有接入任何大模型。点击右上角「新增模型配置」接入 OpenAI 兼容服务（OpenAI / 硅基流动 / 通义千问 / 智谱 / DeepSeek 等）。</div>'; return; }
+      var rows = ps.map(function(p){
+        return '<tr>'+
+          '<td><b>'+esc(p.name)+'</b></td>'+
+          '<td class="muted">'+esc(p.base_url)+'</td>'+
+          '<td>'+esc(p.model)+'</td>'+
+          '<td>'+(p.is_default?'<span class="pill">默认</span>':'<span class="pill off">—</span>')+'</td>'+
+          '<td><code>'+esc(p.api_key||"")+'</code></td>'+
+          '<td style="text-align:right;white-space:nowrap">'+
+            '<button class="btn sm" data-test-llm="'+esc(p.id)+'">测试</button> '+
+            '<button class="btn sm" data-edit-llm="'+esc(p.id)+'">编辑</button> '+
+            '<button class="btn sm danger" data-del-llm="'+esc(p.id)+'">删除</button>'+
+          '</td></tr>';
+      }).join("");
+      $("llmTableWrap").innerHTML = '<table><thead><tr><th>名称</th><th>Base URL</th><th>模型</th><th>默认</th><th>API Key</th><th></th></tr></thead><tbody>'+rows+'</tbody></table>';
+    });
+  }
+  $("llmTableWrap").onclick = function(e){
+    var t=e.target.closest("[data-test-llm]");
+    if(t){ var id=t.getAttribute("data-test-llm"); toast("正在测试连接…"); api("POST","/api/llm/providers/"+encodeURIComponent(id)+"/test").then(function(r){ var d=r.data||{}; toast(d.ok?"✅ "+d.message:"❌ "+(d.message||"测试失败")); }); return; }
+    var ed=e.target.closest("[data-edit-llm]"); if(ed){ openLLMModal(ed.getAttribute("data-edit-llm")); return; }
+    var dl=e.target.closest("[data-del-llm]"); if(dl){ delLLM(dl.getAttribute("data-del-llm")); return; }
+  };
+  $("btnNewLLM").onclick = function(){ openLLMModal(null); };
+  function openLLMModal(id){
+    editingLLMId = id;
+    $("llmModalTitle").textContent = id ? "编辑模型配置" : "新增模型配置";
+    if (id){
+      api("GET","/api/llm/providers").then(function(res){
+        var p=(res.data.providers||[]).find(function(x){ return x.id===id; }); if(!p) return;
+        $("llmName").value=p.name; $("llmBase").value=p.base_url; $("llmModel").value=p.model;
+        $("llmKey").value=""; $("llmKey").placeholder="留空表示不修改"; $("llmKey").type="password";
+        $("llmDefault").checked=!!p.is_default;
+      });
+    } else {
+      ["llmName","llmBase","llmModel","llmKey"].forEach(function(i){ $(i).value=""; });
+      $("llmKey").placeholder=""; $("llmKey").type="password"; $("llmDefault").checked=false;
+    }
+    $("llmModal").classList.add("open");
+  }
+  function saveLLM(){
+    var payload={ name:$("llmName").value.trim(), base_url:$("llmBase").value.trim(), model:$("llmModel").value.trim(), api_key:$("llmKey").value, is_default:$("llmDefault").checked };
+    if(!payload.name){ toast("请填写配置名称"); return; }
+    if(!payload.base_url){ toast("请填写 Base URL"); return; }
+    if(!payload.model){ toast("请填写模型名称"); return; }
+    var p;
+    if(editingLLMId){
+      if(!payload.api_key) delete payload.api_key;  // 编辑时留空则不修改密钥
+      p=api("PUT","/api/llm/providers/"+encodeURIComponent(editingLLMId), payload);
+    } else {
+      if(!payload.api_key){ toast("请填写 API Key"); return; }
+      p=api("POST","/api/llm/providers", payload);
+    }
+    p.then(function(r){
+      if(r.status===200||r.status===201){ toast("已保存"); $("llmModal").classList.remove("open"); loadLLM(); }
+      else toast("保存失败："+(r.data.error||r.status));
+    });
+  }
+  function testLLM(){
+    var base=$("llmBase").value.trim(), model=$("llmModel").value.trim(), key=$("llmKey").value;
+    if(!base||!model){ toast("请先填写 Base URL 与模型名称"); return; }
+    var p;
+    if(editingLLMId && !key.trim()){ p=api("POST","/api/llm/providers/"+encodeURIComponent(editingLLMId)+"/test"); }
+    else { if(!key.trim()){ toast("请填写 API Key"); return; } p=api("POST","/api/llm/test",{base_url:base, api_key:key, model:model}); }
+    toast("正在测试连接…");
+    p.then(function(r){ var d=r.data||{}; toast(d.ok?"✅ "+d.message:"❌ "+(d.message||"测试失败")); });
+  }
+  function delLLM(id){ if(confirm("确定删除该大模型配置？")){ api("DELETE","/api/llm/providers/"+encodeURIComponent(id)).then(function(r){ if(r.status===200){ toast("已删除"); loadLLM(); } else toast("删除失败"); }); } }
+  $("btnSaveLLM").onclick = saveLLM;
+  $("btnTestLLM").onclick = testLLM;
+  $("llmShowKey").onchange = function(){ $("llmKey").type = $("llmShowKey").checked ? "text" : "password"; };
 
   init();
 })();

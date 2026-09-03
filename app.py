@@ -13,6 +13,7 @@ import hashlib
 import hmac
 import sqlite3
 import threading
+import httpx
 from pathlib import Path
 
 from fastapi import FastAPI, Request, HTTPException, Header, Depends
@@ -156,7 +157,31 @@ def init_db():
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
-            """
+            CREATE TABLE IF NOT EXISTS ledger_records (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'weight',
+                channel TEXT NOT NULL DEFAULT '',
+                category TEXT NOT NULL DEFAULT '',
+                amount REAL NOT NULL DEFAULT 0,
+                note TEXT NOT NULL DEFAULT '',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_ledger_user_date ON ledger_records(user_id, date);
+            CREATE TABLE IF NOT EXISTS llm_providers (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
+                base_url TEXT NOT NULL DEFAULT '',
+                api_key TEXT NOT NULL DEFAULT '',
+                model TEXT NOT NULL DEFAULT '',
+                is_default INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+        """
         )
         # 兼容旧库：补充 users 表可能缺失的列
         for col, ddl in [
@@ -264,6 +289,9 @@ DEFAULT_APPS = [
     {"key": "mortgage", "name": "买房计算器", "icon": "🏠",
      "desc": "结合最新房贷政策：按地区选预设利率 / 首付 / 公积金上限，算贷款总额、月供、总利息，并估算契税 / 增值税 / 个税 / 中介费等购房总成本。所有参数可调。",
      "entry": "mortgage.html", "color": "linear-gradient(135deg,#ef4444,#f97316)", "sort": 5},
+    {"key": "ledger", "name": "记账本工作台", "icon": "📒",
+     "desc": "记录每日体重、微信 / 支付宝收支，自动汇总本月收入、支出、结余与消费渠道占比，并绘制体重趋势。数据按账号隔离。",
+     "entry": "ledger.html", "color": "linear-gradient(135deg,#0ea5e9,#22d3ee)", "sort": 6},
 ]
 
 DEFAULT_SETTINGS = {
@@ -1141,6 +1169,352 @@ def delete_mortgage_scenario(sid: int, uid: str = Depends(require_uid)):
         finally:
             conn.close()
     return {"ok": True}
+
+
+# ---------------- 记账本工作台 API ----------------
+# 单表 ledger_records：kind 区分 weight / income / expense；amount 对 weight 表示公斤数。
+def _month_filter(month: str):
+    if month and re.match(r"^\d{4}-\d{2}$", month):
+        return " AND date LIKE ?", (month + "%",)
+    return "", ()
+
+def _ledger_row(r) -> dict:
+    return {
+        "id": r["id"], "date": r["date"], "kind": r["kind"],
+        "channel": r["channel"], "category": r["category"],
+        "amount": r["amount"], "note": r["note"],
+        "createdAt": r["created_at"], "updatedAt": r["updated_at"],
+    }
+
+@app.get("/api/ledger/records")
+def list_ledger(uid: str = Depends(require_uid), month: str = "", date: str = ""):
+    conn = get_conn()
+    try:
+        if date:
+            rows = conn.execute(
+                "SELECT * FROM ledger_records WHERE user_id=? AND date=? ORDER BY created_at DESC", (uid, date)
+            ).fetchall()
+        else:
+            mf, mp = _month_filter(month)
+            rows = conn.execute(
+                "SELECT * FROM ledger_records WHERE user_id=? " + mf + " ORDER BY date DESC, created_at DESC",
+                (uid,) + mp,
+            ).fetchall()
+    finally:
+        conn.close()
+    return {"records": [_ledger_row(r) for r in rows]}
+
+@app.post("/api/ledger/records")
+async def create_ledger(body: dict, uid: str = Depends(require_uid)):
+    date = (body.get("date") or "").strip()
+    if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+        raise HTTPException(400, "日期格式应为 YYYY-MM-DD")
+    kind = body.get("kind") or "expense"
+    if kind not in ("weight", "income", "expense"):
+        raise HTTPException(400, "kind 不合法")
+    try:
+        amount = float(body.get("amount") or 0)
+    except Exception:
+        raise HTTPException(400, "金额/体重必须为数字")
+    if amount < 0:
+        raise HTTPException(400, "金额/体重不能为负")
+    now = int(time.time() * 1000)
+    rid = uid_now()
+    with write_lock:
+        conn = get_conn()
+        try:
+            conn.execute(
+                "INSERT INTO ledger_records (id,user_id,date,kind,channel,category,amount,note,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (rid, uid, date, kind, (body.get("channel") or "").strip(),
+                 (body.get("category") or "").strip(), amount, (body.get("note") or "").strip(), now, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True, "record": {"id": rid, "date": date, "kind": kind,
+                                   "channel": body.get("channel", ""), "category": body.get("category", ""),
+                                   "amount": amount, "note": body.get("note", "")}}
+
+@app.put("/api/ledger/records/{rid}")
+async def update_ledger(rid: str, body: dict, uid: str = Depends(require_uid)):
+    with write_lock:
+        conn = get_conn()
+        try:
+            r = conn.execute("SELECT * FROM ledger_records WHERE id=? AND user_id=?", (rid, uid)).fetchone()
+            if not r:
+                raise HTTPException(404, "记录不存在")
+            date = (body.get("date") or r["date"]).strip()
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", date):
+                raise HTTPException(400, "日期格式应为 YYYY-MM-DD")
+            kind = body.get("kind") or r["kind"]
+            if kind not in ("weight", "income", "expense"):
+                raise HTTPException(400, "kind 不合法")
+            try:
+                amount = float(body.get("amount") if body.get("amount") is not None else r["amount"])
+            except Exception:
+                raise HTTPException(400, "金额/体重必须为数字")
+            if amount < 0:
+                raise HTTPException(400, "金额/体重不能为负")
+            channel = (body.get("channel") if body.get("channel") is not None else r["channel"]) or ""
+            category = (body.get("category") if body.get("category") is not None else r["category"]) or ""
+            note = (body.get("note") if body.get("note") is not None else r["note"]) or ""
+            conn.execute(
+                "UPDATE ledger_records SET date=?,kind=?,channel=?,category=?,amount=?,note=?,updated_at=? WHERE id=? AND user_id=?",
+                (date, kind, channel, category, amount, note, int(time.time() * 1000), rid, uid),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+@app.delete("/api/ledger/records/{rid}")
+def delete_ledger(rid: str, uid: str = Depends(require_uid)):
+    with write_lock:
+        conn = get_conn()
+        try:
+            cur = conn.execute("DELETE FROM ledger_records WHERE id=? AND user_id=?", (rid, uid))
+            conn.commit()
+            if cur.rowcount == 0:
+                return JSONResponse(status_code=404, content={"error": "记录不存在"})
+        finally:
+            conn.close()
+    return {"ok": True}
+
+@app.get("/api/ledger/summary")
+def ledger_summary(uid: str = Depends(require_uid), month: str = ""):
+    if not month:
+        month = time.strftime("%Y-%m")
+    mf, mp = _month_filter(month)
+    conn = get_conn()
+    try:
+        rows = conn.execute("SELECT * FROM ledger_records WHERE user_id=? " + mf, (uid,) + mp).fetchall()
+    finally:
+        conn.close()
+    income = expense = 0.0
+    channels = {"wechat": 0.0, "alipay": 0.0, "cash": 0.0, "card": 0.0}
+    cat_exp = {}
+    weights = []
+    txn_count = 0
+    for r in rows:
+        if r["kind"] == "income":
+            income += r["amount"]
+        elif r["kind"] == "expense":
+            expense += r["amount"]
+            ch = r["channel"] or "cash"
+            if ch in channels:
+                channels[ch] += r["amount"]
+            cat = r["category"] or "其他"
+            cat_exp[cat] = cat_exp.get(cat, 0.0) + r["amount"]
+            txn_count += 1
+        elif r["kind"] == "weight":
+            weights.append({"date": r["date"], "weight": r["amount"]})
+    weights.sort(key=lambda x: x["date"])
+    w_vals = [w["weight"] for w in weights]
+    weight_stat = None
+    if w_vals:
+        weight_stat = {
+            "points": weights,
+            "latest": w_vals[-1], "first": w_vals[0],
+            "min": min(w_vals), "max": max(w_vals),
+            "avg": round(sum(w_vals) / len(w_vals), 2),
+            "change": round(w_vals[-1] - w_vals[0], 2),
+            "count": len(w_vals),
+        }
+    cat_list = sorted(
+        [{"category": k, "total": round(v, 2)} for k, v in cat_exp.items()],
+        key=lambda x: x["total"], reverse=True,
+    )
+    return {
+        "month": month,
+        "income": round(income, 2), "expense": round(expense, 2),
+        "balance": round(income - expense, 2),
+        "channels": {k: round(v, 2) for k, v in channels.items()},
+        "categoryExpense": cat_list,
+        "weight": weight_stat,
+        "txnCount": txn_count,
+    }
+
+
+# ---------------- 大模型配置（每个用户可接入自己的 OpenAI 兼容服务） ----------------
+def _mask_key(k: str) -> str:
+    if not k:
+        return ""
+    if len(k) <= 4:
+        return "****"
+    return "****" + k[-4:]
+
+def _llm_row(r, mask: bool = True) -> dict:
+    return {
+        "id": r["id"], "name": r["name"], "base_url": r["base_url"], "model": r["model"],
+        "is_default": bool(r["is_default"]),
+        "api_key": _mask_key(r["api_key"]) if mask else r["api_key"],
+        "createdAt": r["created_at"], "updatedAt": r["updated_at"],
+    }
+
+def _normalize_base_url(u: str) -> str:
+    u = (u or "").strip()
+    if not u:
+        return ""
+    if not u.startswith("http://") and not u.startswith("https://"):
+        u = "https://" + u
+    return u.rstrip("/")
+
+async def _call_llm_test(base_url, api_key, model):
+    base_url = _normalize_base_url(base_url)
+    if not base_url or not api_key or not model:
+        return {"ok": False, "message": "base_url / api_key / model 均必填"}
+    url = base_url + "/chat/completions"
+    payload = {"model": model, "messages": [{"role": "user", "content": "ping"}], "max_tokens": 1, "temperature": 0}
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(url, headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json"}, json=payload)
+        if resp.status_code == 200:
+            return {"ok": True, "message": "连接成功（模型可用）"}
+        try:
+            err = resp.json()
+        except Exception:
+            err = resp.text
+        return {"ok": False, "message": "HTTP %d: %s" % (resp.status_code, str(err)[:300])}
+    except Exception as e:
+        return {"ok": False, "message": "连接失败：" + str(e)[:200]}
+
+@app.get("/api/llm/providers")
+def list_llm(uid: str = Depends(require_uid)):
+    conn = get_conn()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM llm_providers WHERE user_id=? ORDER BY is_default DESC, updated_at DESC", (uid,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return {"providers": [_llm_row(r) for r in rows]}
+
+@app.post("/api/llm/providers")
+async def create_llm(body: dict, uid: str = Depends(require_uid)):
+    name = (body.get("name") or "").strip()
+    base_url = (body.get("base_url") or "").strip()
+    api_key = (body.get("api_key") or "").strip()
+    model = (body.get("model") or "").strip()
+    if not name:
+        raise HTTPException(400, "请填写配置名称")
+    if not base_url:
+        raise HTTPException(400, "请填写 Base URL")
+    if not api_key:
+        raise HTTPException(400, "请填写 API Key")
+    if not model:
+        raise HTTPException(400, "请填写模型名称")
+    is_default = bool(body.get("is_default"))
+    now = int(time.time() * 1000)
+    pid = uid_now()
+    with write_lock:
+        conn = get_conn()
+        try:
+            if is_default:
+                conn.execute("UPDATE llm_providers SET is_default=0 WHERE user_id=?", (uid,))
+            conn.execute(
+                "INSERT INTO llm_providers (id,user_id,name,base_url,api_key,model,is_default,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                (pid, uid, name, base_url, api_key, model, 1 if is_default else 0, now, now),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True, "id": pid}
+
+@app.put("/api/llm/providers/{pid}")
+async def update_llm(pid: str, body: dict, uid: str = Depends(require_uid)):
+    with write_lock:
+        conn = get_conn()
+        try:
+            r = conn.execute("SELECT * FROM llm_providers WHERE id=? AND user_id=?", (pid, uid)).fetchone()
+            if not r:
+                raise HTTPException(404, "配置不存在")
+            name = (body.get("name") if body.get("name") is not None else r["name"]) or ""
+            base_url = (body.get("base_url") if body.get("base_url") is not None else r["base_url"]) or ""
+            model = (body.get("model") if body.get("model") is not None else r["model"]) or ""
+            api_key = r["api_key"]
+            if body.get("api_key") is not None and str(body.get("api_key")).strip():
+                api_key = str(body.get("api_key")).strip()
+            is_default = bool(body.get("is_default")) if body.get("is_default") is not None else bool(r["is_default"])
+            if is_default:
+                conn.execute("UPDATE llm_providers SET is_default=0 WHERE user_id=?", (uid,))
+            conn.execute(
+                "UPDATE llm_providers SET name=?,base_url=?,api_key=?,model=?,is_default=?,updated_at=? WHERE id=? AND user_id=?",
+                (name, base_url, api_key, model, 1 if is_default else 0, int(time.time() * 1000), pid, uid),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+@app.delete("/api/llm/providers/{pid}")
+def delete_llm(pid: str, uid: str = Depends(require_uid)):
+    with write_lock:
+        conn = get_conn()
+        try:
+            conn.execute("DELETE FROM llm_providers WHERE id=? AND user_id=?", (pid, uid))
+            conn.commit()
+        finally:
+            conn.close()
+    return {"ok": True}
+
+@app.post("/api/llm/test")
+async def test_llm(body: dict, uid: str = Depends(require_uid)):
+    return await _call_llm_test(body.get("base_url"), body.get("api_key"), body.get("model"))
+
+@app.post("/api/llm/providers/{pid}/test")
+async def test_llm_id(pid: str, uid: str = Depends(require_uid)):
+    conn = get_conn()
+    try:
+        r = conn.execute("SELECT * FROM llm_providers WHERE id=? AND user_id=?", (pid, uid)).fetchone()
+    finally:
+        conn.close()
+    if not r:
+        raise HTTPException(404, "配置不存在")
+    return await _call_llm_test(r["base_url"], r["api_key"], r["model"])
+
+@app.post("/api/llm/chat")
+async def llm_chat(body: dict, uid: str = Depends(require_uid)):
+    """通用对话转发代理：为后续上架大模型应用（如 AI 记账助手）提供统一入口。
+    仅使用服务端存储的密钥，前端不接触明文 key。"""
+    pid = body.get("provider_id") or ""
+    conn = get_conn()
+    try:
+        if pid:
+            r = conn.execute("SELECT * FROM llm_providers WHERE id=? AND user_id=?", (pid, uid)).fetchone()
+        else:
+            r = conn.execute("SELECT * FROM llm_providers WHERE user_id=? AND is_default=1 LIMIT 1", (uid,)).fetchone()
+            if not r:
+                r = conn.execute("SELECT * FROM llm_providers WHERE user_id=? ORDER BY updated_at DESC LIMIT 1", (uid,)).fetchone()
+    finally:
+        conn.close()
+    if not r:
+        raise HTTPException(400, "尚未配置任何大模型，请先在「设置 → 大模型配置」中添加")
+    base_url = _normalize_base_url(r["base_url"])
+    api_key = r["api_key"]
+    model = body.get("model") or r["model"]
+    if not model:
+        raise HTTPException(400, "未指定模型")
+    messages = body.get("messages")
+    if not isinstance(messages, list) or not messages:
+        raise HTTPException(400, "messages 必填且为数组")
+    payload = {"model": model, "messages": messages}
+    for k in ("temperature", "top_p", "max_tokens", "stream"):
+        if k in body and body[k] is not None:
+            payload[k] = body[k]
+    url = base_url + "/chat/completions"
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(url, headers={"Authorization": "Bearer " + api_key, "Content-Type": "application/json"}, json=payload)
+            data = resp.json()
+    except Exception as e:
+        raise HTTPException(502, "调用大模型失败：" + str(e)[:200])
+    if resp.status_code != 200:
+        raise HTTPException(resp.status_code, "大模型返回错误：" + str(data)[:300])
+    try:
+        content = data["choices"][0]["message"]["content"]
+    except Exception:
+        content = ""
+    return {"ok": True, "content": content, "model": data.get("model", model), "usage": data.get("usage"), "raw": data}
 
 
 # ---------------- 应用中心 / 设置 / 管理后台 API ----------------

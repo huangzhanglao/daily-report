@@ -674,7 +674,7 @@
       var s = d.settings || {};
       if (s.app_center_title) $("centerTitle").textContent = s.app_center_title;
       if (s.home_intro != null) $("centerIntro").textContent = s.home_intro;
-      $("btnSettings").style.display = (USER && USER.role === "admin") ? "" : "none";
+      $("btnSettings").style.display = USER ? "" : "none";
     }).catch(function(){});
     loadApps();
   }

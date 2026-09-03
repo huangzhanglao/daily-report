@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>记账本工作台</title>
+<style>
+  :root{
+    --bg:#f5f7fb; --panel:#ffffff; --ink:#1f2430; --soft:#5b6478; --faint:#9aa3b5;
+    --line:#e8ebf2; --brand:#0ea5e9; --brand-2:#22d3ee; --brand-soft:#e6f7fe;
+    --ok:#16a34a; --expense:#ef4444; --expense-soft:#fff1f1; --income:#16a34a; --income-soft:#eafaf0;
+    --wechat:#07c160; --alipay:#1677ff; --cash:#f59e0b; --card:#8b5cf6;
+    --radius:16px; --shadow:0 1px 2px rgba(20,30,60,.05),0 10px 28px rgba(20,30,60,.06);
+  }
+  *{box-sizing:border-box;} html,body{margin:0;padding:0;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink); font-size:14px; line-height:1.55; -webkit-font-smoothing:antialiased; min-height:100vh;}
+  button{font-family:inherit; cursor:pointer;}
+  .wrap{max-width:920px; margin:0 auto; padding:0 14px 90px;}
+
+  /* 顶栏 */
+  .topbar{position:sticky; top:0; z-index:40; background:linear-gradient(135deg,#0ea5e9,#22d3ee); color:#fff;
+    padding:14px 16px; display:flex; align-items:center; gap:12px; box-shadow:var(--shadow);}
+  .topbar .back{border:none; background:rgba(255,255,255,.18); color:#fff; width:34px; height:34px; border-radius:10px; font-size:18px; display:grid; place-items:center;}
+  .topbar .back:hover{background:rgba(255,255,255,.3);}
+  .topbar h1{font-size:17px; margin:0; font-weight:700; display:flex; align-items:center; gap:8px;}
+  .topbar .spacer{flex:1;}
+  .topbar .who{font-size:12px; opacity:.92; background:rgba(255,255,255,.18); padding:5px 10px; border-radius:999px;}
+
+  /* 月份切换 */
+  .monthbar{display:flex; align-items:center; gap:10px; padding:14px 2px 4px;}
+  .monthbar .mv{width:32px; height:32px; border:1px solid var(--line); background:var(--panel); border-radius:9px; font-size:16px; color:var(--soft);}
+  .monthbar .mv:hover{border-color:var(--brand); color:var(--brand);}
+  .monthbar .mname{font-size:16px; font-weight:700; min-width:96px; text-align:center;}
+  .monthbar .today{margin-left:auto; font-size:12px; color:var(--brand); border:1px solid var(--brand-soft); background:var(--brand-soft); padding:5px 10px; border-radius:999px;}
+
+  /* 统计卡 */
+  .stats{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:14px 0;}
+  .stat{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:16px; box-shadow:var(--shadow);}
+  .stat .lbl{font-size:12px; color:var(--faint); display:flex; align-items:center; gap:5px;}
+  .stat .num{font-size:23px; font-weight:800; margin-top:6px; letter-spacing:-.5px;}
+  .stat.inc .num{color:var(--income);} .stat.exp .num{color:var(--expense);} .stat.bal .num{color:var(--ink);}
+  .dot{width:8px; height:8px; border-radius:50%; display:inline-block;}
+
+  /* tabs */
+  .tabs{display:flex; gap:6px; background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:4px; width:fit-content; margin:6px 0 14px;}
+  .tabs button{border:none; background:transparent; padding:8px 18px; border-radius:999px; font-size:14px; color:var(--soft); font-weight:600;}
+  .tabs button.active{background:var(--brand); color:#fff;}
+
+  /* 渠道占比 */
+  .channels{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; margin-bottom:14px; box-shadow:var(--shadow);}
+  .channels .ttl{font-size:13px; color:var(--soft); margin-bottom:10px; display:flex; align-items:center; gap:6px;}
+  .ch-bar{display:flex; height:12px; border-radius:999px; overflow:hidden; background:var(--line);}
+  .ch-bar span{height:100%;}
+  .ch-legend{display:flex; flex-wrap:wrap; gap:14px; margin-top:10px;}
+  .ch-legend .it{display:flex; align-items:center; gap:6px; font-size:12px; color:var(--soft);}
+  .ch-legend .it b{color:var(--ink); font-weight:700;}
+
+  .addbtn{position:fixed; right:18px; bottom:22px; z-index:45; background:linear-gradient(135deg,#0ea5e9,#22d3ee);
+    color:#fff; border:none; border-radius:999px; padding:13px 20px; font-size:15px; font-weight:700; box-shadow:0 8px 22px rgba(14,165,233,.4); display:flex; align-items:center; gap:8px;}
+  .addbtn:active{transform:scale(.97);}
+
+  /* 列表 */
+  .day-group{margin-bottom:16px;}
+  .day-head{display:flex; align-items:baseline; gap:8px; margin:0 4px 8px; padding-bottom:6px; border-bottom:1px dashed var(--line);}
+  .day-head .d{font-size:15px; font-weight:700;}
+  .day-head .w{font-size:12px; color:var(--faint);}
+  .day-head .sub{margin-left:auto; font-size:12px; color:var(--soft);}
+  .day-head .sub .e{color:var(--expense);} .day-head .sub .i{color:var(--income);}
+  .row{background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:12px 14px; margin-bottom:8px;
+    display:flex; align-items:center; gap:12px; box-shadow:var(--shadow);}
+  .row .ic{width:38px; height:38px; border-radius:11px; background:var(--brand-soft); display:grid; place-items:center; font-size:19px; flex:none;}
+  .row .mid{flex:1; min-width:0;}
+  .row .mid .t{font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .row .mid .n{font-size:12px; color:var(--faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .row .amt{font-weight:800; font-size:15px; white-space:nowrap;}
+  .row .amt.exp{color:var(--expense);} .row .amt.inc{color:var(--income);}
+  .row .ch-badge{font-size:11px; padding:2px 7px; border-radius:999px; color:#fff; margin-right:8px;}
+  .row .del{border:none; background:transparent; color:var(--faint); font-size:18px; padding:4px 6px; border-radius:8px;}
+  .row .del:hover{background:var(--expense-soft); color:var(--expense);}
+
+  .empty{padding:46px 20px; text-align:center; color:var(--faint);}
+  .empty .big{font-size:42px; margin-bottom:8px;}
+
+  /* 体重 */
+  .wstat{display:grid; grid-template-columns:repeat(2,1fr); gap:12px; margin:14px 0;}
+  .wstat .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:14px 16px; box-shadow:var(--shadow);}
+  .wstat .lbl{font-size:12px; color:var(--faint);} .wstat .v{font-size:20px; font-weight:800; margin-top:4px;}
+  .wstat .v.up{color:var(--expense);} .wstat .v.down{color:var(--ok);}
+  .wchart-wrap{background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:12px; margin-bottom:14px; box-shadow:var(--shadow);}
+  .wchart{width:100%; height:auto; display:block;}
+  .wchart .ax{font-size:11px; fill:var(--faint);}
+
+  /* 弹窗 */
+  .mask{position:fixed; inset:0; background:rgba(18,24,40,.45); display:none; align-items:flex-end; justify-content:center; z-index:60; padding:0;}
+  .mask.open{display:flex;}
+  .sheet{background:var(--panel); width:100%; max-width:560px; border-radius:20px 20px 0 0; padding:18px 18px 26px; max-height:92vh; overflow:auto; animation:up .2s ease;}
+  @keyframes up{from{transform:translateY(30px);opacity:.6;} to{transform:translateY(0);opacity:1;}}
+  .sheet h3{margin:0 0 14px; font-size:17px; display:flex; align-items:center;}
+  .sheet h3 .x{margin-left:auto; border:none; background:transparent; font-size:24px; color:var(--faint); line-height:1;}
+  .seg{display:inline-flex; background:var(--bg); border-radius:11px; padding:4px; gap:4px; width:100%;}
+  .seg button{flex:1; border:none; background:transparent; padding:9px; border-radius:8px; font-size:14px; font-weight:600; color:var(--soft);}
+  .seg button.active{background:var(--panel); color:var(--brand); box-shadow:var(--shadow);}
+  .seg.exp button.active{color:var(--expense);} .seg.inc button.active{color:var(--income);}
+  .amount-in{width:100%; border:none; border-bottom:2px solid var(--line); font-size:34px; font-weight:800; padding:8px 2px; text-align:right; color:var(--ink); outline:none; background:transparent; margin:6px 0 4px;}
+  .amount-in:focus{border-color:var(--brand);}
+  .field{margin:14px 0;}
+  .field>label{display:block; font-size:12px; color:var(--soft); margin-bottom:8px; font-weight:600;}
+  .cat-grid{display:grid; grid-template-columns:repeat(5,1fr); gap:8px;}
+  .cat-grid .c{border:1px solid var(--line); border-radius:12px; padding:9px 2px; text-align:center; font-size:12px; color:var(--soft); background:var(--panel);}
+  .cat-grid .c .e{font-size:20px; display:block; margin-bottom:2px;}
+  .cat-grid .c.on{border-color:var(--brand); background:var(--brand-soft); color:var(--brand); font-weight:700;}
+  .ch-grid{display:grid; grid-template-columns:repeat(4,1fr); gap:8px;}
+  .ch-grid .c{border:1px solid var(--line); border-radius:11px; padding:9px 4px; text-align:center; font-size:12px; color:var(--soft); background:var(--panel); display:flex; flex-direction:column; align-items:center; gap:3px;}
+  .ch-grid .c .e{font-size:18px;}
+  .ch-grid .c.on{border-color:var(--brand); background:var(--brand-soft); color:var(--brand); font-weight:700;}
+  input[type=date],input[type=text],textarea,input.note{width:100%; padding:10px 12px; border:1px solid var(--line); border-radius:11px; font-size:14px; font-family:inherit; color:var(--ink); background:var(--panel); outline:none;}
+  input[type=date]:focus,input[type=text]:focus,textarea:focus,input.note:focus{border-color:var(--brand);}
+  textarea{resize:vertical; min-height:54px;}
+  .foot{display:flex; gap:10px; margin-top:18px;}
+  .foot .btn{flex:1; padding:13px; border-radius:12px; border:1px solid var(--line); background:var(--panel); font-size:15px; font-weight:700; color:var(--soft);}
+  .foot .btn.primary{background:var(--brand); border-color:var(--brand); color:#fff;}
+  .foot .btn.primary:hover{filter:brightness(1.05);}
+  .toast{position:fixed; bottom:26px; left:50%; transform:translateX(-50%) translateY(20px); background:#1f2430; color:#fff; padding:10px 18px; border-radius:10px; font-size:13px; opacity:0; transition:.25s; z-index:90; pointer-events:none;}
+  .toast.show{opacity:.96; transform:translateX(-50%) translateY(0);}
+  @media (max-width:480px){ .cat-grid{grid-template-columns:repeat(4,1fr);} .stat .num{font-size:20px;} }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <button class="back" id="btnHome" title="返回应用中心">←</button>
+  <h1>📒 记账本工作台</h1>
+  <div class="spacer"></div>
+  <span class="who" id="who">…</span>
+</header>
+
+<div class="wrap">
+  <div class="monthbar">
+    <button class="mv" id="prevM">‹</button>
+    <div class="mname" id="mName">—</div>
+    <button class="mv" id="nextM">›</button>
+    <button class="today" id="toToday">今月</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat inc"><div class="lbl"><span class="dot" style="background:var(--income)"></span>本月收入</div><div class="num" id="sInc">¥0.00</div></div>
+    <div class="stat exp"><div class="lbl"><span class="dot" style="background:var(--expense)"></span>本月支出</div><div class="num" id="sExp">¥0.00</div></div>
+    <div class="stat bal"><div class="lbl"><span class="dot" style="background:var(--brand)"></span>本月结余</div><div class="num" id="sBal">¥0.00</div></div>
+  </div>
+
+  <div class="tabs">
+    <button id="tabTxn" class="active">💸 账目明细</button>
+    <button id="tabWeight">⚖️ 体重记录</button>
+  </div>
+
+  <!-- 账目 -->
+  <section id="secTxn">
+    <div class="channels" id="chBox">
+      <div class="ttl">💳 支出渠道占比（微信 / 支付宝 / 现金 / 银行卡）</div>
+      <div class="ch-bar" id="chBar"></div>
+      <div class="ch-legend" id="chLegend"></div>
+    </div>
+    <div id="txnList"><div class="empty"><div class="big">💸</div>本月还没有账目，点右下角「记一笔」开始</div></div>
+  </section>
+
+  <!-- 体重 -->
+  <section id="secWeight" style="display:none">
+    <div class="wstat" id="wStat"></div>
+    <div class="wchart-wrap" id="wChart"></div>
+    <div id="weightList"></div>
+  </section>
+</div>
+
+<button class="addbtn" id="addBtn">＋ 记一笔</button>
+
+<!-- 账目弹窗 -->
+<div class="mask" id="txnMask">
+  <div class="sheet">
+    <h3 id="txnTitle">记一笔 <button class="x" data-close="txnMask">×</button></h3>
+    <div class="seg exp" id="typeSeg">
+      <button data-type="expense" class="active">支出</button>
+      <button data-type="income">收入</button>
+    </div>
+    <input class="amount-in" id="txnAmount" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00">
+    <div class="field">
+      <label>分类</label>
+      <div class="cat-grid" id="catGrid"></div>
+    </div>
+    <div class="field">
+      <label>支付方式</label>
+      <div class="ch-grid" id="chGrid"></div>
+    </div>
+    <div class="field">
+      <label>日期</label>
+      <input type="date" id="txnDate">
+    </div>
+    <div class="field">
+      <label>备注（可选）</label>
+      <input type="text" id="txnNote" placeholder="如：午餐 / 打车 / 工资">
+    </div>
+    <div class="foot">
+      <button class="btn" data-close="txnMask">取消</button>
+      <button class="btn primary" id="txnSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 体重弹窗 -->
+<div class="mask" id="wMask">
+  <div class="sheet">
+    <h3>记体重 <button class="x" data-close="wMask">×</button></h3>
+    <div class="field">
+      <label>日期</label>
+      <input type="date" id="wDate">
+    </div>
+    <div class="field">
+      <label>体重（kg）</label>
+      <input class="amount-in" id="wVal" type="number" inputmode="decimal" step="0.1" min="0" placeholder="0.0" style="text-align:left">
+    </div>
+    <div class="field">
+      <label>备注（可选）</label>
+      <input type="text" id="wNote" placeholder="如：晨起空腹">
+    </div>
+    <div class="foot">
+      <button class="btn" data-close="wMask">取消</button>
+      <button class="btn primary" id="wSave">保存</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+  var CATS = {
+    expense: [["餐饮","🍜"],["交通","🚌"],["购物","🛍️"],["居住","🏠"],["水电燃气","🚰"],["通讯","📱"],["医疗","💊"],["教育","📚"],["娱乐","🎮"],["旅行","✈️"],["人情社交","🍻"],["宠物","🐾"],["服饰","👗"],["其他","📦"]],
+    income:  [["工资","💰"],["奖金","🎁"],["红包","🧧"],["理财收益","📈"],["兼职","💼"],["其他","📦"]]
+  };
+  var CH = {
+    wechat:{label:"微信支付",color:"var(--wechat)",raw:"#07c160",icon:"💚"},
+    alipay:{label:"支付宝",color:"var(--alipay)",raw:"#1677ff",icon:"🔵"},
+    cash:{label:"现金",color:"var(--cash)",raw:"#f59e0b",icon:"💵"},
+    card:{label:"银行卡",color:"var(--card)",raw:"#8b5cf6",icon:"🏦"}
+  };
+  var WK = ["日","一","二","三","四","五","六"];
+
+  var state = { month: ym(new Date()), tab:"txn", records:[], summary:null,
+                editId:null, txnType:"expense", cat:"", channel:"wechat", wEditId:null };
+
+  function $(id){ return document.getElementById(id); }
+  function ym(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+  function pad(n){ return String(n).padStart(2,"0"); }
+  function today(){ var d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+  function money(n){ n=Math.round((n||0)*100)/100; return "¥"+n.toLocaleString("zh-CN",{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function esc(s){ return (s==null?"":String(s)).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+
+  function api(method, path, body){
+    var opts={method:method, headers:{"Content-Type":"application/json"}};
+    if(body!==undefined) opts.body=JSON.stringify(body);
+    return fetch(path, opts).then(function(r){ return r.json().then(function(d){return {status:r.status,data:d};}).catch(function(){return {status:r.status,data:{}};}); });
+  }
+  function toast(msg){ var t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove("show");},2000); }
+  function goHome(){ location.href="index.html"; }
+
+  /* ---------- 鉴权：登录态由首页 cookie 携带，本页仅校验，未登录跳回首页 ---------- */
+  function init(){
+    api("GET","/api/auth/me").then(function(res){
+      if(res.status!==200 || !res.data.user){ location.href="index.html"; return; }
+      var u=res.data.user; $("who").textContent = (u.displayName||u.username);
+      load();
+    }).catch(function(){ location.href="index.html"; });
+  }
+
+  function load(){
+    var m=state.month;
+    api("GET","/api/ledger/summary?month="+encodeURIComponent(m)).then(function(r){ if(r.status===200) state.summary=r.data; });
+    api("GET","/api/ledger/records?month="+encodeURIComponent(m)).then(function(r){
+      if(r.status===200){ state.records=r.data.records||[]; render(); }
+    });
+  }
+
+  function render(){
+    $("mName").textContent = state.month.replace("-","年")+"月";
+    renderStats();
+    if(state.tab==="txn"){ renderChannels(); renderTxn(); }
+    else { renderWeight(); }
+  }
+
+  function renderStats(){
+    var s=state.summary||{income:0,expense:0,balance:0};
+    $("sInc").textContent=money(s.income); $("sExp").textContent=money(s.expense); $("sBal").textContent=money(s.balance);
+  }
+
+  function renderChannels(){
+    var s=state.summary;
+    var box=$("chBox");
+    if(!s || (!s.channels.wechat && !s.channels.alipay && !s.channels.cash && !s.channels.card)){
+      box.style.display="none"; return;
+    }
+    box.style.display="";
+    var ch=s.channels, total=ch.wechat+ch.alipay+ch.cash+ch.card;
+    var bar=$("chBar"); bar.innerHTML="";
+    var leg=$("chLegend"); leg.innerHTML="";
+    ["wechat","alipay","cash","card"].forEach(function(k){
+      var v=ch[k]||0; if(v<=0) return;
+      var pct= total>0 ? (v/total*100) : 0;
+      var seg=document.createElement("span");
+      seg.style.width=pct+"%"; seg.style.background=CH[k].raw; seg.title=CH[k].label+" "+money(v);
+      bar.appendChild(seg);
+      var it=document.createElement("div"); it.className="it";
+      it.innerHTML='<span class="dot" style="background:'+CH[k].raw+'"></span>'+CH[k].label+' <b>'+money(v)+'</b>';
+      leg.appendChild(it);
+    });
+    if(!bar.children.length) box.style.display="none";
+  }
+
+  function renderTxn(){
+    var list=$("txnList");
+    var recs=state.records.filter(function(r){ return r.kind!=="weight"; });
+    if(!recs.length){ list.innerHTML='<div class="empty"><div class="big">💸</div>本月还没有账目，点右下角「记一笔」开始</div>'; return; }
+    // 按日期分组（倒序）
+    var groups={};
+    recs.forEach(function(r){ (groups[r.date]=groups[r.date]||[]).push(r); });
+    var dates=Object.keys(groups).sort(function(a,b){return a<b?1:-1;});
+    var html="";
+    dates.forEach(function(d){
+      var items=groups[d].slice().sort(function(a,b){return a.createdAt<b.createdAt?1:-1;});
+      var exp=0,inc=0;
+      items.forEach(function(r){ if(r.kind==="expense") exp+=r.amount; else inc+=r.amount; });
+      var dt=new Date(d.replace(/-/g,"/"));
+      html+='<div class="day-group"><div class="day-head"><span class="d">'+d.slice(5)+'</span><span class="w">周'+WK[dt.getDay()]+'</span>'+
+            '<span class="sub">支出 <span class="e">'+money(exp)+'</span> · 收入 <span class="i">'+money(inc)+'</span></span></div>';
+      items.forEach(function(r){
+        var catName=r.category||"其他";
+        var emoji="📦";
+        CATS[r.kind==="income"?"income":"expense"].forEach(function(c){ if(c[0]===catName) emoji=c[1]; });
+        var ch=CH[r.channel]||CH.cash;
+        var amtCls = r.kind==="expense"?"exp":"inc";
+        var sign = r.kind==="expense"?"-":"+";
+        html+='<div class="row" data-id="'+esc(r.id)+'">'+
+          '<div class="ic">'+emoji+'</div>'+
+          '<div class="mid"><div class="t">'+esc(catName)+(r.note?' <span style="font-weight:400;color:var(--faint)">· '+esc(r.note)+'</span>':'')+'</div>'+
+          '<div class="n">'+esc(ch.label)+'</div></div>'+
+          '<div class="amt '+amtCls+'">'+sign+money(r.amount)+'</div>'+
+          '<button class="del" data-del="'+esc(r.id)+'" title="删除">×</button></div>';
+      });
+      html+='</div>';
+    });
+    list.innerHTML=html;
+  }
+
+  function renderWeight(){
+    var s=state.summary;
+    var wsec=$("secWeight");
+    var wstat=$("wStat"), wchart=$("wChart"), wlist=$("weightList");
+    var w = (s&&s.weight) ? s.weight : null;
+    if(!w){
+      wstat.innerHTML='<div class="card"><div class="lbl">最新体重</div><div class="v">—</div></div><div class="card"><div class="lbl">较首条变化</div><div class="v">—</div></div>';
+      wchart.innerHTML='<div class="empty"><div class="big">⚖️</div>本月还没有体重记录，点右下角「记体重」</div>';
+      wlist.innerHTML=""; return;
+    }
+    var chg=w.change; var chgCls= chg>0?"up":(chg<0?"down":"");
+    var chgTxt;
+    if(chg===0) chgTxt="±0 kg";
+    else if(chg<0) chgTxt="▼ "+Math.abs(Math.round(chg*10)/10)+" kg";
+    else chgTxt="▲ +"+Math.round(chg*10)/10+" kg";
+    wstat.innerHTML=
+      '<div class="card"><div class="lbl">最新体重 ('+esc(w.points[w.points.length-1].date.slice(5))+')</div><div class="v">'+w.latest+' kg</div></div>'+
+      '<div class="card"><div class="lbl">较首条变化</div><div class="v '+chgCls+'">'+chgTxt+'</div></div>'+
+      '<div class="card"><div class="lbl">平均 / 最低~最高</div><div class="v" style="font-size:16px">'+w.avg+' · '+w.min+'~'+w.max+'</div></div>'+
+      '<div class="card"><div class="lbl">记录天数</div><div class="v">'+w.count+' 天</div></div>';
+    wchart.innerHTML=renderWeightChart(w.points);
+    // 列表（来自完整记录，含 id 与备注，支持编辑/删除）
+    var recs=state.records.filter(function(r){return r.kind==="weight";}).sort(function(a,b){return a.date<b.date?1:(a.date>b.date?-1:(a.createdAt<b.createdAt?1:-1));});
+    var html=recs.map(function(r){
+      return '<div class="row" data-wid="'+esc(r.id)+'"><div class="ic">⚖️</div><div class="mid"><div class="t">'+esc(r.date)+'</div>'+
+        (r.note?'<div class="n">'+esc(r.note)+'</div>':'')+'</div><div class="amt">'+r.amount+' kg</div>'+
+        '<button class="del" data-wdel="'+esc(r.id)+'" title="删除">×</button></div>';
+    }).join("");
+    wlist.innerHTML=html||'<div class="empty">暂无记录</div>';
+  }
+
+  function renderWeightChart(points){
+    if(!points.length) return "";
+    var W=680,H=220,pl=44,pr=16,pt=18,pb=30, pw=W-pl-pr, ph=H-pt-pb;
+    var vals=points.map(function(p){return p.weight;});
+    var min=Math.min.apply(null,vals), max=Math.max.apply(null,vals);
+    if(min===max){ min-=1; max+=1; }
+    var pad=(max-min)*0.18; min-=pad; max+=pad;
+    var n=points.length;
+    function X(i){ return n===1? pl+pw/2 : pl+(i/(n-1))*pw; }
+    function Y(v){ return pt+(1-(v-min)/(max-min))*ph; }
+    var path=""; var dots="";
+    points.forEach(function(p,i){ var cx=X(i),cy=Y(p.weight); path+=(i===0?"M":"L")+cx.toFixed(1)+" "+cy.toFixed(1)+" "; dots+='<circle cx="'+cx.toFixed(1)+'" cy="'+cy.toFixed(1)+'" r="3.6" fill="#0ea5e9" stroke="#fff" stroke-width="1.6"/>'; });
+    function f(v){ return Number.isInteger(v)?v:v.toFixed(1); }
+    var xf=points[0].date.slice(5), xl=points[n-1].date.slice(5), xm=(n>2?points[Math.floor(n/2)].date.slice(5):"");
+    return '<svg viewBox="0 0 '+W+' '+H+'" class="wchart" preserveAspectRatio="xMidYMid meet">'+
+      '<line x1="'+pl+'" y1="'+pt+'" x2="'+pl+'" y2="'+(pt+ph)+'" stroke="#e8ebf2"/>'+
+      '<line x1="'+pl+'" y1="'+(pt+ph)+'" x2="'+(pl+pw)+'" y2="'+(pt+ph)+'" stroke="#e8ebf2"/>'+
+      '<text x="'+(pl-8)+'" y="'+(Y(max)+4)+'" text-anchor="end" class="ax">'+f(max)+'</text>'+
+      '<text x="'+(pl-8)+'" y="'+(Y(min)+4)+'" text-anchor="end" class="ax">'+f(min)+'</text>'+
+      '<path d="'+path+'" fill="none" stroke="#0ea5e9" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>'+
+      dots+
+      '<text x="'+pl+'" y="'+(H-8)+'" text-anchor="start" class="ax">'+xf+'</text>'+
+      (xm?'<text x="'+(pl+pw/2)+'" y="'+(H-8)+'" text-anchor="middle" class="ax">'+xm+'</text>':'')+
+      '<text x="'+(pl+pw)+'" y="'+(H-8)+'" text-anchor="end" class="ax">'+xl+'</text>'+
+      '</svg>';
+  }
+
+  /* ---------- 账目弹窗 ---------- */
+  function openTxn(rec){
+    state.editId = rec ? rec.id : null;
+    $("txnTitle").textContent = rec ? "编辑账目" : "记一笔";
+    state.txnType = rec ? (rec.kind==="income"?"income":"expense") : "expense";
+    state.cat = rec ? rec.category : "";
+    state.channel = rec ? (rec.channel||"wechat") : "wechat";
+    $("txnAmount").value = rec ? rec.amount : "";
+    $("txnDate").value = rec ? rec.date : today();
+    $("txnNote").value = rec ? (rec.note||"") : "";
+    setTypeSeg(); renderCatGrid(); renderChGrid();
+    $("txnMask").classList.add("open");
+    setTimeout(function(){ $("txnAmount").focus(); },60);
+  }
+  function setTypeSeg(){
+    document.querySelectorAll("#typeSeg button").forEach(function(b){ b.classList.toggle("active", b.getAttribute("data-type")===state.txnType); });
+    $("typeSeg").className = "seg "+state.txnType;
+  }
+  function renderCatGrid(){
+    var grid=$("catGrid"); grid.innerHTML="";
+    CATS[state.txnType==="income"?"income":"expense"].forEach(function(c){
+      var el=document.createElement("div"); el.className="c"+(state.cat===c[0]?" on":"");
+      el.innerHTML='<span class="e">'+c[1]+'</span>'+c[0];
+      el.onclick=function(){ state.cat=c[0]; renderCatGrid(); };
+      grid.appendChild(el);
+    });
+  }
+  function renderChGrid(){
+    var grid=$("chGrid"); grid.innerHTML="";
+    ["wechat","alipay","cash","card"].forEach(function(k){
+      var el=document.createElement("div"); el.className="c"+(state.channel===k?" on":"");
+      el.innerHTML='<span class="e">'+CH[k].icon+'</span>'+CH[k].label;
+      el.onclick=function(){ state.channel=k; renderChGrid(); };
+      grid.appendChild(el);
+    });
+  }
+  $("typeSeg").onclick=function(e){ var b=e.target.closest("button[data-type]"); if(!b) return; state.txnType=b.getAttribute("data-type"); state.cat=""; setTypeSeg(); renderCatGrid(); };
+  $("txnSave").onclick=function(){
+    var amount=parseFloat($("txnAmount").value);
+    var date=$("txnDate").value;
+    if(!date){ toast("请选择日期"); return; }
+    if(isNaN(amount)||amount<=0){ toast("请输入大于 0 的金额"); return; }
+    if(!state.cat){ toast("请选择一个分类"); return; }
+    var payload={ date:date, kind:state.txnType, channel:state.channel, category:state.cat, amount:Math.round(amount*100)/100, note:$("txnNote").value.trim() };
+    var p;
+    if(state.editId) p=api("PUT","/api/ledger/records/"+encodeURIComponent(state.editId),payload);
+    else p=api("POST","/api/ledger/records",payload);
+    p.then(function(r){
+      if(r.status===200||r.status===201){ toast("已保存"); $("txnMask").classList.remove("open"); load(); }
+      else toast("保存失败："+(r.data.error||r.data.detail||r.status));
+    });
+  };
+
+  /* ---------- 体重弹窗 ---------- */
+  function openWeight(rec){
+    state.wEditId = rec ? rec.id : null;
+    $("wDate").value = rec ? rec.date : today();
+    $("wVal").value = rec ? rec.amount : "";
+    $("wNote").value = rec ? (rec.note||"") : "";
+    $("wMask").classList.add("open");
+    setTimeout(function(){ $("wVal").focus(); },60);
+  }
+  $("wSave").onclick=function(){
+    var v=parseFloat($("wVal").value); var date=$("wDate").value;
+    if(!date){ toast("请选择日期"); return; }
+    if(isNaN(v)||v<=0){ toast("请输入有效体重"); return; }
+    var payload={ date:date, kind:"weight", amount:Math.round(v*10)/10, note:$("wNote").value.trim() };
+    var p;
+    if(state.wEditId) p=api("PUT","/api/ledger/records/"+encodeURIComponent(state.wEditId),payload);
+    else p=api("POST","/api/ledger/records",payload);
+    p.then(function(r){
+      if(r.status===200||r.status===201){ toast("已记录"); $("wMask").classList.remove("open"); load(); }
+      else toast("保存失败："+(r.data.error||r.data.detail||r.status));
+    });
+  };
+
+  /* ---------- 列表事件 ---------- */
+  $("txnList").onclick=function(e){
+    var del=e.target.closest("[data-del]");
+    if(del){ if(confirm("确定删除这条账目？")){ api("DELETE","/api/ledger/records/"+encodeURIComponent(del.getAttribute("data-del"))).then(function(r){ if(r.status===200){ toast("已删除"); load(); } else toast("删除失败"); }); } return; }
+    var row=e.target.closest("[data-id]");
+    if(row){ var id=row.getAttribute("data-id"); var rec=state.records.find(function(x){return x.id===id;}); if(rec) openTxn(rec); }
+  };
+  $("weightList").onclick=function(e){
+    var del=e.target.closest("[data-wdel]");
+    if(del){ if(confirm("确定删除这条体重记录？")){ api("DELETE","/api/ledger/records/"+encodeURIComponent(del.getAttribute("data-wdel"))).then(function(r){ if(r.status===200){ toast("已删除"); load(); } else toast("删除失败"); }); } return; }
+    var row=e.target.closest("[data-wid]");
+    if(row){ var id=row.getAttribute("data-wid"); var rec=state.records.find(function(x){return x.id===id;}); if(rec) openWeight(rec); }
+  };
+
+  /* ---------- tab / 月份 / 新增 ---------- */
+  $("tabTxn").onclick=function(){ state.tab="txn"; $("tabTxn").classList.add("active"); $("tabWeight").classList.remove("active"); $("secTxn").style.display=""; $("secWeight").style.display="none"; $("addBtn").textContent="＋ 记一笔"; render(); };
+  $("tabWeight").onclick=function(){ state.tab="weight"; $("tabWeight").classList.add("active"); $("tabTxn").classList.remove("active"); $("secWeight").style.display=""; $("secTxn").style.display="none"; $("addBtn").textContent="＋ 记体重"; render(); };
+  $("prevM").onclick=function(){ var y=+state.month.slice(0,4), m=+state.month.slice(5,7); m--; if(m<1){m=12;y--;} state.month=y+"-"+pad(m); load(); };
+  $("nextM").onclick=function(){ var y=+state.month.slice(0,4), m=+state.month.slice(5,7); m++; if(m>12){m=1;y++;} state.month=y+"-"+pad(m); load(); };
+  $("toToday").onclick=function(){ state.month=ym(new Date()); load(); };
+  $("addBtn").onclick=function(){ if(state.tab==="weight") openWeight(null); else openTxn(null); };
+  $("btnHome").onclick=goHome;
+  document.querySelectorAll("[data-close]").forEach(function(x){ x.onclick=function(){ $(x.getAttribute("data-close")).classList.remove("open"); }; });
+  document.querySelectorAll(".mask").forEach(function(m){ m.onclick=function(e){ if(e.target===m) m.classList.remove("open"); }; });
+
+  init();
+})();
+</script>
+</body>
+</html>
