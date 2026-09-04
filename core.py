@@ -202,6 +202,22 @@ def init_db():
                 updated_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_doc_user_created ON doc_docs(user_id, created_at);
+            CREATE TABLE IF NOT EXISTS travel_plans (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                title TEXT NOT NULL DEFAULT '',
+                prompt TEXT NOT NULL DEFAULT '',
+                plan TEXT NOT NULL DEFAULT '{}',
+                attractions TEXT NOT NULL DEFAULT '',
+                transport TEXT NOT NULL DEFAULT '',
+                routing TEXT NOT NULL DEFAULT '',
+                itinerary TEXT NOT NULL DEFAULT '',
+                evaluation TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'done',
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_travel_user_created ON travel_plans(user_id, created_at);
         """
         )
         # 兼容旧库：补充 users 表可能缺失的列
@@ -314,6 +330,9 @@ DEFAULT_APPS = [
     {"key": "doc", "name": "AI 文档工作台", "icon": "✍️",
      "desc": "接入大模型帮你写材料：选文体（公文/报告/总结/方案等）→ 粘贴或上传素材 → AI 生成初稿、反思审稿、再改写产出高质量终稿。成果入库可重写。",
      "entry": "doc.html", "color": "linear-gradient(135deg,#8b5cf6,#a78bfa)", "sort": 7},
+    {"key": "travel", "name": "AI 旅游规划", "icon": "🧳",
+     "desc": "多智能体帮你做行程：一句话说需求 → Planner 解析 + 景点/交通(12306)/路线(高德)三个专家并行 → 统筹成逐日行程 → 质检门控。可接入高德/12306 实时数据，未接入时基于模型知识并标注。",
+     "entry": "travel.html", "color": "linear-gradient(135deg,#0ea5e9,#22d3ee)", "sort": 8},
 ]
 
 DEFAULT_SETTINGS = {
