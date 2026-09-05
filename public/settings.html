@@ -94,6 +94,7 @@
   <button class="tab" data-tab="users">用户管理</button>
   <button class="tab" data-tab="guide">操作说明</button>
   <button class="tab" data-tab="llm">大模型配置</button>
+  <button class="tab" data-tab="datasource">数据源配置</button>
 </nav>
 
 <main class="wrap" id="mainWrap">
@@ -152,6 +153,27 @@
     </div>
     <div class="hint" style="margin-bottom:14px">接入任意 OpenAI 兼容服务（OpenAI / 硅基流动 / 通义千问 / 智谱 / DeepSeek / 本地 Ollama 等）：填写 Base URL、API Key 与模型名。密钥仅保存在服务端、列表内脱敏展示；后续上架的大模型应用将自动调用这里的配置。</div>
     <div id="llmTableWrap"><div class="empty">加载中…</div></div>
+  </section>
+
+  <!-- 数据源配置（实时接口：高德 / 12306 代理） -->
+  <section class="panel" id="tab-datasource" style="display:none">
+    <div class="panel-head">
+      <h2>数据源配置（实时接口）</h2>
+      <div class="spacer"></div>
+      <button class="btn primary" id="btnSaveDS">保存</button>
+    </div>
+    <div class="hint" style="margin-bottom:14px">配置后无需重启服务即可生效。高德 Key 用于实时 POI 检索与路线规划；12306 代理地址用于实时火车票（项目内置 <code>train_proxy.py</code>，用无头浏览器绕过 12306 官方防火墙）。</div>
+    <div class="field">
+      <label>高德 Web 服务 Key（AMAP_WEB_KEY）</label>
+      <input id="dsAmapKey" type="password" placeholder="高德开放平台申请的 Web 服务 Key" autocomplete="off">
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="dsShowAmap" style="width:auto"> 显示 Key</label>
+      <span id="dsAmapStatus" class="hint"></span>
+    </div>
+    <div class="field">
+      <label>12306 代理地址（TRAIN_API_BASE，可选）</label>
+      <input id="dsTrainBase" type="text" placeholder="如 http://127.0.0.1:8799 （留空则走内置直连，多数服务器环境会被 12306 防火墙拦截降级）">
+      <span id="dsTrainStatus" class="hint"></span>
+    </div>
   </section>
 </main>
 
@@ -253,10 +275,10 @@
       var isAdmin = USER.role === "admin";
       if (isAdmin){
         $("who").textContent = "当前：" + (USER.displayName || USER.username) + "（管理员）";
-        ["apps","perms","users","guide"].forEach(function(n){ $("tab-"+n).style.display=""; });
+        ["apps","perms","users","guide","datasource"].forEach(function(n){ $("tab-"+n).style.display=""; });
       } else {
         $("who").textContent = "当前：" + (USER.displayName || USER.username);
-        ["apps","perms","users","guide"].forEach(function(n){
+        ["apps","perms","users","guide","datasource"].forEach(function(n){
           $("tab-"+n).style.display="none";
           var tb=document.querySelector('#navTabs .tab[data-tab="'+n+'"]'); if(tb) tb.style.display="none";
         });
@@ -264,7 +286,7 @@
         $("tab-llm").style.display="";
       }
       loadLLM();
-      if (isAdmin){ loadApps(); loadPerms(); loadUsers(); loadGuide(); }
+      if (isAdmin){ loadApps(); loadPerms(); loadUsers(); loadGuide(); loadDatasource(); }
     }).catch(function(){ location.href="index.html"; });
   }
 
@@ -273,12 +295,13 @@
     var t = e.target.closest(".tab"); if(!t) return;
     var name = t.getAttribute("data-tab");
     document.querySelectorAll("#navTabs .tab").forEach(function(x){ x.classList.toggle("active", x===t); });
-    ["apps","perms","users","guide","llm"].forEach(function(n){ $("tab-"+n).style.display = (n===name) ? "" : "none"; });
+    ["apps","perms","users","guide","llm","datasource"].forEach(function(n){ $("tab-"+n).style.display = (n===name) ? "" : "none"; });
     if (name==="apps") loadApps();
     if (name==="perms") loadPerms();
     if (name==="users") loadUsers();
     if (name==="guide") loadGuide();
     if (name==="llm") loadLLM();
+    if (name==="datasource") loadDatasource();
   };
 
   /* ---------- 应用管理 ---------- */
@@ -540,6 +563,29 @@
   $("btnSaveLLM").onclick = saveLLM;
   $("btnTestLLM").onclick = testLLM;
   $("llmShowKey").onchange = function(){ $("llmKey").type = $("llmShowKey").checked ? "text" : "password"; };
+
+  /* ---------- 数据源配置（高德 Key / 12306 代理） ---------- */
+  function loadDatasource(){
+    api("GET","/api/settings").then(function(res){
+      var s = (res.data && res.data.settings) || {};
+      $("dsAmapKey").value = s.amap_web_key || "";
+      $("dsTrainBase").value = s.train_api_base || "";
+      if (s.amap_web_key){ $("dsAmapStatus").textContent = "✅ 高德 Key 已配置，实时路线已开启"; }
+      else { $("dsAmapStatus").textContent = "⚠️ 未配置高德 Key，路线规划将降级为模型知识"; }
+      if (s.train_api_base){ $("dsTrainStatus").textContent = "✅ 12306 代理已配置：" + s.train_api_base; }
+      else { $("dsTrainStatus").textContent = "⚠️ 未配置代理，12306 直连多数环境会被防火墙拦截降级"; }
+    });
+  }
+  $("btnSaveDS").onclick = function(){
+    api("PUT","/api/admin/settings", {
+      amap_web_key: $("dsAmapKey").value.trim(),
+      train_api_base: $("dsTrainBase").value.trim()
+    }).then(function(r){
+      if (r.status===200){ toast("已保存，旅游智能体将立即使用新数据源"); loadDatasource(); }
+      else toast("保存失败：" + (r.data.error || r.status));
+    });
+  };
+  $("dsShowAmap").onchange = function(){ $("dsAmapKey").type = $("dsShowAmap").checked ? "text" : "password"; };
 
   init();
 })();

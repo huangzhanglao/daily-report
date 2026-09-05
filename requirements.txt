@@ -8,3 +8,5 @@ redis==5.2.1
 python-multipart==0.0.20
 python-docx==1.2.0
 pypdf==6.16.2
+# 12306 火车票代理 train_proxy.py 需要（用真实浏览器指纹绕过官方 WAF；浏览器需另行 playwright install chromium）
+playwright==1.62.0

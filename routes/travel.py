@@ -37,13 +37,49 @@ from core import (
 router = APIRouter()
 
 # ---------------- 工具开关（实时数据接入） ----------------
-AMAP_WEB_KEY = os.environ.get("AMAP_WEB_KEY", "").strip()
-TRAIN_API_BASE = os.environ.get("TRAIN_API_BASE", "").strip()
+# 优先级：应用内「设置 → 数据源配置」(settings_meta) > 环境变量。
+# 这样无需重启服务即可在界面上填写高德 Key / 12306 代理地址。
+_AMAP_KEY_ENV = os.environ.get("AMAP_WEB_KEY", "").strip()
+_TRAIN_BASE_ENV = os.environ.get("TRAIN_API_BASE", "").strip()
+
+# settings_meta 缓存（避免每次请求都读库）
+_SETTINGS_CACHE: dict = {}
+_SETTINGS_CACHE_AT: float = 0.0
+_SETTINGS_TTL = 30.0
+
+
+def _get_settings() -> dict:
+    global _SETTINGS_CACHE, _SETTINGS_CACHE_AT
+    now = time.time()
+    if now - _SETTINGS_CACHE_AT < _SETTINGS_TTL and _SETTINGS_CACHE:
+        return _SETTINGS_CACHE
+    try:
+        conn = get_conn()
+        try:
+            rows = conn.execute("SELECT key, value FROM settings_meta").fetchall()
+        finally:
+            conn.close()
+        s = {r["key"]: r["value"] for r in rows}
+    except Exception:
+        s = _SETTINGS_CACHE or {}
+    _SETTINGS_CACHE, _SETTINGS_CACHE_AT = s, now
+    return s
+
+
+def amap_web_key() -> str:
+    """高德 Web 服务 Key：优先取 settings_meta，否则环境变量。"""
+    return (_get_settings().get("amap_web_key") or _AMAP_KEY_ENV).strip()
+
+
+def train_api_base() -> str:
+    """12306 自建代理地址：优先取 settings_meta，否则环境变量；为空则走内置直连。"""
+    return (_get_settings().get("train_api_base") or _TRAIN_BASE_ENV).strip()
 
 
 def tool_status() -> dict:
-    """返回当前实时数据工具是否可用（前端据此提示）。高德需 key；12306 内置直连默认可用。"""
-    return {"amap": bool(AMAP_WEB_KEY), "train": True}
+    """返回当前实时数据工具是否可用（前端据此提示）。高德需 key；12306 内置直连默认可用，
+    若配置了 train_api_base 代理则优先走代理。"""
+    return {"amap": bool(amap_web_key()), "train": True, "train_proxy": bool(train_api_base())}
 
 
 # ---------------- 大模型调用（复用 llm_providers 配置，逻辑同 doc.py） ----------------
@@ -136,7 +172,7 @@ async def _json_chat(uid, messages, temperature, max_tokens, pid, role_hint):
 # 12306：内置直连，无需 key；TRAIN_API_BASE 为可选的自建代理覆盖。
 async def _amap_get(path: str, params: dict):
     params = {k: v for k, v in params.items() if v is not None}
-    params["key"] = AMAP_WEB_KEY
+    params["key"] = amap_web_key()
     try:
         async with httpx.AsyncClient(timeout=10, verify=False) as c:
             r = await c.get("https://restapi.amap.com" + path, params=params)
@@ -147,7 +183,7 @@ async def _amap_get(path: str, params: dict):
 
 async def amap_geocode(addr: str, city: str = None):
     """地址/地名 → 'lng,lat'。失败返回 None。"""
-    if not AMAP_WEB_KEY or not addr:
+    if not amap_web_key() or not addr:
         return None
     d = await _amap_get("/v3/geocode/geo", {"address": addr, "city": city})
     if d and d.get("status") == "1" and d.get("geocodes"):
@@ -157,7 +193,7 @@ async def amap_geocode(addr: str, city: str = None):
 
 async def amap_poi(city: str, keyword: str):
     """检索城市 POI（景点/美食等），返回带坐标的列表；无 key 返回 None。"""
-    if not AMAP_WEB_KEY or not city:
+    if not amap_web_key() or not city:
         return None
     d = await _amap_get("/v3/place/text", {"city": city, "keywords": keyword or "景点", "offset": 15, "extensions": "base"})
     if d and d.get("status") == "1":
@@ -172,7 +208,7 @@ async def amap_poi(city: str, keyword: str):
 async def amap_route(origin: str, destination: str, city: str = None, mode: str = "transit"):
     """两点间路线规划（高德）。origin/destination 可为地名（自动地理编码）。
     mode: transit(公交地铁)/driving/walking。返回可读摘要，无 key 或失败返回 None。"""
-    if not AMAP_WEB_KEY or not origin or not destination:
+    if not amap_web_key() or not origin or not destination:
         return None
     oloc = await amap_geocode(origin, city) or origin
     dloc = await amap_geocode(destination, city) or destination
@@ -310,10 +346,10 @@ async def train_query(from_station: str, to_station: str, date: str):
         return None
     if not date:
         date = (datetime.now() + timedelta(days=15)).strftime("%Y-%m-%d")
-    if TRAIN_API_BASE:
+    if train_api_base():
         try:
             async with httpx.AsyncClient(timeout=10, verify=False) as c:
-                r = await c.get(TRAIN_API_BASE.rstrip("/") + "/query", params={"from": from_station, "to": to_station, "date": date})
+                r = await c.get(train_api_base().rstrip("/") + "/query", params={"from": from_station, "to": to_station, "date": date})
                 return r.json()
         except Exception:
             return None
