@@ -24,8 +24,29 @@
     # 把应用放在 HTTP/1.1 + HTTP/2 之后
     encode gzip
 
-    # 反代到 compose 内网的应用容器
-    reverse_proxy app:8787
+    route {
+        # ---------- 12306 实时查票代理（/train 子路径，复用同一证书） ----------
+        # 仅暴露 GET /train/query 与 GET /train/health；非 GET 返回 405；其余 /train/* 一律 404。
+        @train_post {
+            method POST PUT DELETE PATCH
+            path /train/*
+        }
+        respond @train_post 405
+
+        @train_api path /train/query /train/health
+        handle @train_api {
+            uri strip_prefix /train
+            reverse_proxy train_proxy:8799 {
+                timeout 120s
+            }
+        }
+
+        @train_other path /train/*
+        respond @train_other 404
+
+        # ---------- 其余流量 → 应用容器 ----------
+        reverse_proxy app:8787
+    }
 
     # 可选：限制上传体大小（记账/导入大 JSON 时按需放宽）
     # request_body {

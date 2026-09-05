@@ -48,6 +48,19 @@ bash deploy/train_proxy/start.sh        # Linux / macOS / WSL
 # 公网部署前先 export PROXY_TOKEN=你的强Token
 ```
 
+### 方式 C：组合进 daily-report 主 Compose（同一节点 / 同一 Caddy，推荐）
+
+项目根 `docker-compose.yml` 已内置 `train_proxy` 服务，并通过 `deploy/docker/Caddyfile` 的
+`/train` 子路径对外暴露（复用主站证书，无需额外域名）。这样一套 `docker compose up` 即同时起
+应用 + 代理 + 反代。详见 **`deploy/docker/README.md` 第 8 节**。
+
+```bash
+export TRAIN_PROXY_TOKEN="你的强Token"          # 与 daily-report「数据源配置」页的 Token 一致
+APP_DOMAIN=your.domain.com docker compose up -d --build
+# 应用侧把「12306 代理地址」填 http://train_proxy:8799（同 compose 内网直连）
+#   或 https://your.domain.com/train（走公网 Caddy 子路径）
+```
+
 ## 安全（公网部署必看）
 
 - 代理本身**不设鉴权也可运行**，但公网暴露会允许任何人借你的节点刷 12306。
@@ -58,9 +71,10 @@ bash deploy/train_proxy/start.sh        # Linux / macOS / WSL
 
 ## 接入 daily-report
 
-1. 代理在某节点跑起来（例如 `http://203.0.113.10:8799`）。
+1. 代理在某节点跑起来（例如 `http://203.0.113.10:8799`，或组合部署时的 `http://train_proxy:8799`）。
 2. 进入 `daily-report` **设置 → 数据源配置**（管理员）：
    - `12306 代理地址` 填 `http://203.0.113.10:8799`
+     （组合部署且同 compose 内：填 `http://train_proxy:8799`；跨主机走 Caddy：`https://<域名>/train`）
    - （若代理设了 PROXY_TOKEN）`12306 代理 Token` 填同一值
 3. 保存后**立即生效，无需重启**。旅游智能体生成行程时即直出实时车次/余票。
 

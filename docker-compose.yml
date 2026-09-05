@@ -2,9 +2,10 @@
 # 日报工作台 —— Docker Compose 编排
 #
 # 服务组成：
-#   app    FastAPI 应用（本镜像 Dockerfile 构建）
-#   redis  共享限流后端（REDIS_URL 指向它；Redis 不可达会自动回退内存限流）
-#   caddy  反向代理 + 自动 HTTPS（终止 TLS，注入 X-Forwarded-*）
+#   app          FastAPI 应用（本镜像 Dockerfile 构建）
+#   redis        共享限流后端（REDIS_URL 指向它；Redis 不可达会自动回退内存限流）
+#   train_proxy  12306 实时查票代理（Playwright 真实浏览器指纹反爬；仅容器内网可达）
+#   caddy        反向代理 + 自动 HTTPS（终止 TLS，注入 X-Forwarded-*；同时暴露 /train → train_proxy）
 #
 # 用法：
 #   本地测试（Caddy 内部 CA）：
@@ -51,6 +52,23 @@ services:
     # 数据用命名卷持久化（RDB/AOF 视 redis 默认配置）
     volumes:
       - redis-data:/data
+    restart: unless-stopped
+
+  # 12306 实时查票代理（Playwright 真实浏览器指纹反爬）。
+  # 仅容器内网可达；公网流量统一走 caddy 的 /train 反代，不直接暴露。
+  # 注意：12306 官方按出口 IP 拦截，本服务必须跑在“未被 12306 封锁的节点”上才能真正出实时数据。
+  train_proxy:
+    build:
+      context: .                      # 构建上下文=项目根（Dockerfile 需 COPY train_proxy.py / requirements.txt）
+      dockerfile: deploy/train_proxy/Dockerfile
+    image: daily-report-train-proxy:latest
+    expose:
+      - "8799"
+    environment:
+      # 公网代理鉴权 Token：务必设置，避免被他人滥用刷 12306。
+      # 需与 daily-report「数据源配置」页的「12306 代理 Token」填写一致。
+      PROXY_TOKEN: ${TRAIN_PROXY_TOKEN:-}
+      PORT: "8799"
     restart: unless-stopped
 
   caddy:
