@@ -11,10 +11,11 @@
     Evaluator（校验门控：缺漏/冲突检测，最多一轮返工）
 
 工具层（tool adapters）支持接入实时数据：
-    - 高德 Web 服务（环境变量 AMAP_WEB_KEY）→ 实时 POI 检索 / 路线规划
-    - 12306 逆向接口（环境变量 TRAIN_API_BASE）→ 实时火车票查询
-均做了优雅降级：未配置 key 时工具返回 None，交由模型基于知识生成，并在行程中明确
-标注「（模型知识，仅供参考）」，保证开箱即用、任何 provider 都能跑。
+    - 高德 Web 服务（环境变量 AMAP_WEB_KEY）→ 实时 POI 检索 / 地理编码 / 路线规划（公交地铁/驾车/步行）
+    - 12306 火车票：内置直连（自动获取车站电码 + RAIL cookie + leftTicket 查询），无需 key；
+      TRAIN_API_BASE 为可选的自建代理覆盖。
+均做了优雅降级：高德未配置 key 时返回 None 交由模型基于知识生成，并在行程中明确
+标注「（模型知识，仅供参考）」；12306 查询失败/无票时同样降级，保证开箱即用、任何 provider 都能跑。
 
 鉴权：require_uid，所有数据按 user_id 隔离。
 """
@@ -24,6 +25,8 @@ import json
 import time
 import asyncio
 import httpx
+import urllib.request
+from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -39,8 +42,8 @@ TRAIN_API_BASE = os.environ.get("TRAIN_API_BASE", "").strip()
 
 
 def tool_status() -> dict:
-    """返回当前实时数据工具是否可用（前端据此提示）。"""
-    return {"amap": bool(AMAP_WEB_KEY), "train": bool(TRAIN_API_BASE)}
+    """返回当前实时数据工具是否可用（前端据此提示）。高德需 key；12306 内置直连默认可用。"""
+    return {"amap": bool(AMAP_WEB_KEY), "train": True}
 
 
 # ---------------- 大模型调用（复用 llm_providers 配置，逻辑同 doc.py） ----------------
@@ -128,59 +131,193 @@ async def _json_chat(uid, messages, temperature, max_tokens, pid, role_hint):
     return _extract_json(raw2)
 
 
-# ---------------- 工具适配器（高德 / 12306），无 key 时优雅降级 ----------------
+# ---------------- 工具适配器 ----------------
+# 高德 Web 服务：需环境变量 AMAP_WEB_KEY（实时 POI / 路线规划）。
+# 12306：内置直连，无需 key；TRAIN_API_BASE 为可选的自建代理覆盖。
+async def _amap_get(path: str, params: dict):
+    params = {k: v for k, v in params.items() if v is not None}
+    params["key"] = AMAP_WEB_KEY
+    try:
+        async with httpx.AsyncClient(timeout=10, verify=False) as c:
+            r = await c.get("https://restapi.amap.com" + path, params=params)
+            return r.json()
+    except Exception:
+        return None
+
+
+async def amap_geocode(addr: str, city: str = None):
+    """地址/地名 → 'lng,lat'。失败返回 None。"""
+    if not AMAP_WEB_KEY or not addr:
+        return None
+    d = await _amap_get("/v3/geocode/geo", {"address": addr, "city": city})
+    if d and d.get("status") == "1" and d.get("geocodes"):
+        return d["geocodes"][0].get("location")
+    return None
+
+
 async def amap_poi(city: str, keyword: str):
-    """检索某城市 POI（景点/美食等）。无 key 时返回 None（降级为模型知识）。"""
+    """检索城市 POI（景点/美食等），返回带坐标的列表；无 key 返回 None。"""
     if not AMAP_WEB_KEY or not city:
         return None
+    d = await _amap_get("/v3/place/text", {"city": city, "keywords": keyword or "景点", "offset": 15, "extensions": "base"})
+    if d and d.get("status") == "1":
+        return [
+            {"name": p.get("name"), "address": p.get("address", ""), "type": p.get("type", ""),
+             "location": p.get("location", "")}
+            for p in d.get("pois", [])
+        ]
+    return None
+
+
+async def amap_route(origin: str, destination: str, city: str = None, mode: str = "transit"):
+    """两点间路线规划（高德）。origin/destination 可为地名（自动地理编码）。
+    mode: transit(公交地铁)/driving/walking。返回可读摘要，无 key 或失败返回 None。"""
+    if not AMAP_WEB_KEY or not origin or not destination:
+        return None
+    oloc = await amap_geocode(origin, city) or origin
+    dloc = await amap_geocode(destination, city) or destination
+    paths = {"transit": "/v3/direction/transit/integrated", "driving": "/v3/direction/driving", "walking": "/v3/direction/walking"}
+    params = {"origin": oloc, "destination": dloc}
+    if mode == "transit" and city:
+        params.update({"city": city, "cityd": city, "strategy": "0"})
+    elif mode == "driving":
+        params["strategy"] = "2"
+    d = await _amap_get(paths.get(mode, "/v3/direction/transit/integrated"), params)
+    if not d or d.get("status") != "1":
+        return None
     try:
-        params = {"key": AMAP_WEB_KEY, "city": city, "keywords": keyword, "offset": 15, "extensions": "base"}
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get("https://restapi.amap.com/v3/place/text", params=params)
-            data = r.json()
-        if data.get("status") == "1":
-            return [
-                {"name": p.get("name"), "address": p.get("address", ""), "type": p.get("type", "")}
-                for p in data.get("pois", [])
-            ]
+        if mode == "transit":
+            t = d["route"]["transits"][0]
+            segs = []
+            for s in t.get("segments", []):
+                for bl in s.get("bus", {}).get("buslines", []):
+                    segs.append(f"{bl.get('name','')}({bl.get('departure_stop',{}).get('name','')}→{bl.get('arrival_stop',{}).get('name','')})")
+                wd = int(s.get("walking", {}).get("distance", 0) or 0)
+                if wd > 50:
+                    segs.append(f"步行{wd}米")
+            cost = t.get("cost", {}).get("duration")
+            return f"公共交通约 {cost} 分钟；换乘：{'；'.join(segs[:4])}"
+        else:
+            p = d["route"]["paths"][0]
+            dist = int(p.get("distance", 0)) // 1000
+            dur = int(p.get("duration", 0)) // 60
+            return f"{'驾车' if mode=='driving' else '步行'}约 {dist} 公里 / {dur} 分钟"
+    except Exception:
+        return None
+
+
+# ---------- 12306（内置直连，无需 key） ----------
+_STATION_CACHE = None
+
+
+def _load_stations():
+    global _STATION_CACHE
+    if _STATION_CACHE is not None:
+        return _STATION_CACHE
+    try:
+        req = urllib.request.Request(
+            "https://kyfw.12306.cn/otn/resources/js/framework/station_name.js",
+            headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            txt = r.read().decode("utf-8", "replace")
+        m = re.search(r"station_names\s*=\s*'(.+?)';", txt, re.S)
+        body = m.group(1) if m else txt
+        stations = {}
+        for part in body.split("@"):
+            f = part.split("|")
+            if len(f) >= 3 and f[1] and f[2] and f[1] not in stations:
+                stations[f[1]] = f[2]
+        _STATION_CACHE = stations
+    except Exception:
+        _STATION_CACHE = {}
+    return _STATION_CACHE
+
+
+def _station_code(name: str):
+    s = _load_stations()
+    if not name:
+        return None
+    if name in s:
+        return s[name]
+    for k, v in s.items():
+        if k.startswith(name) or name.startswith(k):
+            return v
+    return None
+
+
+_SEAT_MAP = {21: "商务座", 22: "特等座", 23: "一等包座", 24: "一等座", 25: "二等包座",
+             26: "二等座", 27: "高级软卧", 28: "软卧", 29: "动卧", 30: "硬卧",
+             31: "软座", 32: "硬座", 33: "无座", 34: "其它"}
+
+
+async def _train_query_12306(from_station: str, to_station: str, date: str):
+    """直连 12306 查票。注意：12306 有反爬（需浏览器指纹 cookie），纯服务端请求在多数环境会被 WAF 拦截
+    而降级为 None（交由模型知识）。若部署环境可访问，或自建代理，则可返回真实车次。"""
+    fc, tc = _station_code(from_station), _station_code(to_station)
+    if not fc or not tc:
+        return None
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+               "Accept": "*/*", "Accept-Language": "zh-CN,zh;q=0.9",
+               "Referer": "https://kyfw.12306.cn/otn/leftTicket/init"}
+    params = {"leftTicketDTO.train_date": date, "leftTicketDTO.from_station": fc,
+              "leftTicketDTO.to_station": tc, "leftTicketDTO.distance_kilometers": "0", "purpose_codes": "ADULT"}
+    try:
+        async with httpx.AsyncClient(timeout=25, verify=False, headers=headers) as c:
+            await c.get("https://kyfw.12306.cn/otn/leftTicket/init", headers=headers)  # 领取会话 cookie
+            r = await c.get("https://kyfw.12306.cn/otn/leftTicket/queryO", params=params)
+            d = _safe_json(r)
+            # 12306 有时返回 {"c_url":"leftTicket/queryG",...} 让客户端跳转，跟随一次
+            if (not d or d.get("status") is not True) and d and d.get("c_url"):
+                r2 = await c.get("https://kyfw.12306.cn/otn/" + d["c_url"], params=params)
+                d = _safe_json(r2)
+            if not d or d.get("status") is not True:
+                return None
+            return _parse_12306(d, date, from_station, to_station)
     except Exception:
         return None
     return None
 
 
-async def amap_route(city: str, origins: list, destination: str):
-    """同城多点到一点的路线规划（高德）。无 key 时返回 None。"""
-    if not AMAP_WEB_KEY or not origins or not destination:
-        return None
+def _safe_json(r):
     try:
-        params = {
-            "key": AMAP_WEB_KEY,
-            "origin": origins[0],
-            "destination": destination,
-            "city": city,
-            "strategy": "2",  # 距离最短
-        }
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get("https://restapi.amap.com/v3/direction/driving", params=params)
-            data = r.json()
-        if data.get("status") == "1":
-            return data.get("route", {})
+        return r.json()
     except Exception:
         return None
-    return None
+
+
+def _parse_12306(d, date, from_station, to_station):
+    out = []
+    for row in d.get("result", [])[:20]:
+        f = row.split("|")
+        if len(f) < 35:
+            continue
+        seats = []
+        for i, label in _SEAT_MAP.items():
+            val = f[i] if i < len(f) else ""
+            if val and val not in ("", "--", "无"):
+                seats.append(f"{label}{val}")
+        out.append({
+            "train": f[3], "from": f[6], "to": f[7],
+            "depart": f[8], "arrive": f[9], "duration": f[10],
+            "seats": seats[:6],
+        })
+    return {"date": date, "from": from_station, "to": to_station, "trains": out}
 
 
 async def train_query(from_station: str, to_station: str, date: str):
-    """查询 12306 火车票。需要自建 TRAIN_API_BASE 逆向服务；无则降级。"""
-    if not TRAIN_API_BASE or not from_station or not to_station:
+    """查询 12306 火车票。默认内置直连；若设了 TRAIN_API_BASE 则走自建代理。无输入返回 None。"""
+    if not from_station or not to_station:
         return None
-    try:
-        async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(TRAIN_API_BASE.rstrip("/") + "/query", params={"from": from_station, "to": to_station, "date": date})
-            data = r.json()
-        return data
-    except Exception:
-        return None
+    if not date:
+        date = (datetime.now() + timedelta(days=15)).strftime("%Y-%m-%d")
+    if TRAIN_API_BASE:
+        try:
+            async with httpx.AsyncClient(timeout=10, verify=False) as c:
+                r = await c.get(TRAIN_API_BASE.rstrip("/") + "/query", params={"from": from_station, "to": to_station, "date": date})
+                return r.json()
+        except Exception:
+            return None
+    return await _train_query_12306(from_station, to_station, date)
 
 
 # ---------------- Agent 节点（每个都是一次专注的 LLM 调用） ----------------
@@ -258,24 +395,43 @@ async def specialist_attractions(uid: str, plan: dict, pid: str) -> dict:
     return {"text": text, "live": bool(poi_block), "pois": pois}
 
 
+def _valid_query_date(s: str) -> str:
+    """把计划出发日换算成 12306 可查的预售期内日期；超出或无效则取默认近日期。"""
+    try:
+        d = datetime.strptime(s, "%Y-%m-%d").date()
+        today = datetime.now().date()
+        if today <= d <= today + timedelta(days=28):
+            return s
+    except Exception:
+        pass
+    return (datetime.now() + timedelta(days=15)).strftime("%Y-%m-%d")
+
+
+def _format_tickets(tickets: dict) -> str:
+    if not tickets:
+        return ""
+    lines = []
+    for k, v in tickets.items():
+        lines.append(f"\n【{k}】（查询日期 {v.get('date','')}）")
+        for t in v.get("trains", [])[:8]:
+            seat = "、".join(t.get("seats", [])) or "余票未知"
+            lines.append(f"  {t['train']} {t['depart']}→{t['arrive']}（{t['duration']}） {seat}")
+    return "\n".join(lines)
+
+
 async def specialist_transport(uid: str, plan: dict, pid: str) -> dict:
-    """交通专家：城市间交通（高铁/飞机）+ 市内交通说明（可融合 12306 实时票）。"""
+    """交通专家：城市间交通（高铁/动车/飞机）+ 市内交通说明（融合 12306 实时票）。"""
     cities = plan.get("cities") or []
     live = tool_status()
     tickets = {}
     if live["train"] and len(cities) >= 2:
-        pairs = []
+        qdate = _valid_query_date(plan.get("start_date", ""))
         for i in range(len(cities) - 1):
-            date = plan.get("start_date", "")
-            res = await train_query(cities[i], cities[i + 1], date)
-            if res:
+            res = await train_query(cities[i], cities[i + 1], qdate)
+            if res and res.get("trains"):
                 tickets[f"{cities[i]}→{cities[i+1]}"] = res
 
-    ticket_block = ""
-    if tickets:
-        for k, v in tickets.items():
-            ticket_block += f"\n【{k}】实时车次：{json.dumps(v, ensure_ascii=False)[:800]}\n"
-
+    ticket_block = _format_tickets(tickets)
     sys_prompt = (
         "你是交通规划专家。依据城市顺序与日期，规划城市间交通（以高铁/动车、飞机为主），给出建议车次类型、"
         "大致耗时与票价区间，并说明每段抵达后的市内交通方式（地铁/打车/公交）。\n"
@@ -291,22 +447,36 @@ async def specialist_transport(uid: str, plan: dict, pid: str) -> dict:
     return {"text": text, "live": bool(ticket_block), "tickets": tickets}
 
 
-async def specialist_routing(uid: str, plan: dict, attractions_text: str, pid: str) -> dict:
-    """路线编排专家：把景点排成每日时间线，动线顺、标注交通耗时与餐饮。"""
+async def specialist_routing(uid: str, plan: dict, attractions_text: str, pois: dict, pid: str) -> dict:
+    """路线编排专家：把景点排成每日时间线，融合高德实时路线耗时。pois 为景点专家输出的实时 POI。"""
     cities = plan.get("cities") or ["目的地"]
     live = tool_status()
+    route_block = ""
+    if live["amap"] and pois:
+        first_city = next((c for c in cities if c in pois), None) or (list(pois.keys())[0] if pois else None)
+        spots = pois.get(first_city, []) if first_city else []
+        if len(spots) >= 2:
+            r = await amap_route(spots[0].get("name", ""), spots[1].get("name", ""), first_city, "transit")
+            if r:
+                route_block = f"\n【{first_city}】高德实时路线（{spots[0]['name']}→{spots[1]['name']}）：{r}\n"
+        elif len(spots) == 1:
+            r = await amap_route(first_city, spots[0].get("name", ""), first_city, "transit")
+            if r:
+                route_block = f"\n【{first_city}】高德实时路线（市中心→{spots[0]['name']}）：{r}\n"
+
     sys_prompt = (
         "你是每日路线编排专家。基于『景点推荐』材料与城市，产出每日时间线（上午/下午/晚上），"
         "合理安排景点顺序使动线顺、避免大量折返；标注景点间交通方式与预计耗时，并插入餐饮建议。"
-        + ("若已接入高德路线耗时数据请采用；" if live["amap"] else "未接入实时路线，请基于知识估计耗时并标注「（模型知识，仅供参考）」。")
+        + ("已接入高德实时路线耗时数据，请在时间线中采用并标注来源；" if route_block else "未接入实时路线，请基于知识估计耗时并标注「（模型知识，仅供参考）」。")
         + "按 Day1、Day2… 输出，每天含：城市、主题、时间线、餐饮。"
     )
     user = (
         f"行程天数={plan.get('days')}，城市={cities}，节奏={plan.get('pace','适中')}，"
         f"饮食偏好={plan.get('food_pref','当地特色')}\n\n【景点推荐材料】\n" + (attractions_text or "（无）")
+        + (route_block if route_block else "")
     )
     text = (await _chat(uid, [{"role": "system", "content": sys_prompt}, {"role": "user", "content": user}], temperature=0.6, max_tokens=4000, pid=pid)).strip()
-    return {"text": text, "live": live["amap"]}
+    return {"text": text, "live": bool(route_block)}
 
 
 async def synthesizer(uid: str, plan: dict, attr: dict, trans: dict, route: dict, pid: str, revision_note: str = "") -> str:
@@ -385,7 +555,7 @@ async def run_harness(uid: str, prompt: str, pid: str, emit=None) -> dict:
         _with_emit(specialist_attractions(uid, plan, pid), "attractions"),
         _with_emit(specialist_transport(uid, plan, pid), "transport"),
     )
-    route = await _with_emit(specialist_routing(uid, plan, attr.get("text", ""), pid), "routing")
+    route = await _with_emit(specialist_routing(uid, plan, attr.get("text", ""), attr.get("pois", {}), pid), "routing")
 
     # 3) Synthesizer
     await stage(3, "running")
