@@ -64,6 +64,23 @@ bash deploy/train_proxy/start.sh        # Linux / macOS / WSL
    - （若代理设了 PROXY_TOKEN）`12306 代理 Token` 填同一值
 3. 保存后**立即生效，无需重启**。旅游智能体生成行程时即直出实时车次/余票。
 
+## 通过反向代理暴露到公网域名（推荐）
+
+直接把 8799 端口暴露到公网既不加密也难管控。建议用 **nginx / Caddy** 在前面套一层 HTTPS + 域名，
+并做安全收敛（仅 GET、仅 `/query` `/health`、限流）。同机运行时让代理只监听 `127.0.0.1`，由反代对外。
+
+- `nginx-train-proxy.conf`：Nginx 配置（含限流 `limit_req`、GET-only、路径收敛、certbot 证书示例）。
+  - 放到 `/etc/nginx/conf.d/train-proxy.conf` → `nginx -t && systemctl reload nginx`
+- `Caddyfile`：Caddy 配置（自动 HTTPS，GET-only + 路径收敛，零证书管理）。
+  - `caddy run --config deploy/train_proxy/Caddyfile`
+- `daily-report-train-proxy.service`：systemd 单元，用 Docker 跑代理并仅绑定 `127.0.0.1:8799`，
+  由上面的反代转发。
+  - `cp daily-report-train-proxy.service /etc/systemd/system/ && systemctl enable --now train_proxy`
+  - 部署前先把 `PROXY_TOKEN` 改成强随机值（与 daily-report 的 TRAIN_API_TOKEN 一致）
+
+> 无论用哪种反代，应用层 `PROXY_TOKEN` 仍建议开启——反代只管"加密 + 收敛暴露面"，
+> Token 管"谁被允许调用"，两层互补。
+
 ## 排错
 
 | 现象 | 原因 / 处理 |

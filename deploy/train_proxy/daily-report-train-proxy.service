@@ -1,0 +1,19 @@
+[Unit]
+Description=12306 Train Proxy (Playwright browser proxy for daily-report)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+# 仅在同机用，监听 127.0.0.1（不对外直开），由 nginx/Caddy 反代到公网
+# 镜像需先构建： docker compose -f /opt/daily-report/deploy/train_proxy/docker-compose.yml build
+ExecStart=/usr/bin/docker run --rm --name train_proxy \
+    --env PROXY_TOKEN=your_strong_token_here \
+    -p 127.0.0.1:8799:8799 \
+    daily-report-train-proxy:latest
+# 公网部署务必把 PROXY_TOKEN 改成强随机值，并与 daily-report「数据源配置」页的 TRAIN_API_TOKEN 保持一致
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

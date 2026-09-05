@@ -1,0 +1,23 @@
+# ============================================================
+# 12306 代理 · Caddy 反向代理 + 自动 HTTPS
+# 配合 deploy/train_proxy/train_proxy.py（监听 127.0.0.1:8799）
+# 用法： caddy run --config deploy/train_proxy/Caddyfile
+# Caddy 会自动向 Let's Encrypt 申请/续期证书（需把域名 A 记录指向本机）。
+# 安全收敛：仅 GET、仅 /query 与 /health、其余 404。
+# 注：限流非 Caddy 内置（需 caddy-ratelimit 插件），如需可用 Nginx 版本或加插件。
+# ============================================================
+
+train.your-domain.com {
+    # 仅允许 GET，其余方法 405
+    @notget not method GET
+    respond @notget 405
+
+    # 仅暴露 /query 与 /health，其余 404
+    @api path /query /health
+    reverse_proxy @api 127.0.0.1:8799 {
+        transport http {
+            read_timeout 120s   # 无头浏览器访问 12306 可能较慢
+        }
+    }
+    respond 404
+}
