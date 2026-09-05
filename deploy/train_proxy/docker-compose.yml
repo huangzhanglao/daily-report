@@ -1,0 +1,16 @@
+services:
+  train_proxy:
+    build: .
+    image: daily-report-train-proxy:latest
+    container_name: train_proxy
+    restart: unless-stopped
+    ports:
+      - "8799:8799"
+    environment:
+      # 公网部署务必设置；与 daily-report「数据源配置」页的 TRAIN_API_TOKEN 保持一致
+      - PROXY_TOKEN=${PROXY_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8799/health').status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

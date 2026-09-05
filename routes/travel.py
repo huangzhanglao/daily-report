@@ -41,6 +41,7 @@ router = APIRouter()
 # 这样无需重启服务即可在界面上填写高德 Key / 12306 代理地址。
 _AMAP_KEY_ENV = os.environ.get("AMAP_WEB_KEY", "").strip()
 _TRAIN_BASE_ENV = os.environ.get("TRAIN_API_BASE", "").strip()
+_TRAIN_TOKEN_ENV = os.environ.get("TRAIN_API_TOKEN", "").strip()
 
 # settings_meta 缓存（避免每次请求都读库）
 _SETTINGS_CACHE: dict = {}
@@ -74,6 +75,11 @@ def amap_web_key() -> str:
 def train_api_base() -> str:
     """12306 自建代理地址：优先取 settings_meta，否则环境变量；为空则走内置直连。"""
     return (_get_settings().get("train_api_base") or _TRAIN_BASE_ENV).strip()
+
+
+def train_api_token() -> str:
+    """12306 代理鉴权 Token：部署在公网节点时代理设了 PROXY_TOKEN，这里需配同一值（可填进数据源配置页）。"""
+    return (_get_settings().get("train_api_token") or _TRAIN_TOKEN_ENV).strip()
 
 
 def tool_status() -> dict:
@@ -348,8 +354,12 @@ async def train_query(from_station: str, to_station: str, date: str):
         date = (datetime.now() + timedelta(days=15)).strftime("%Y-%m-%d")
     if train_api_base():
         try:
+            params = {"from": from_station, "to": to_station, "date": date}
+            tok = train_api_token()
+            if tok:
+                params["token"] = tok
             async with httpx.AsyncClient(timeout=10, verify=False) as c:
-                r = await c.get(train_api_base().rstrip("/") + "/query", params={"from": from_station, "to": to_station, "date": date})
+                r = await c.get(train_api_base().rstrip("/") + "/query", params=params)
                 return r.json()
         except Exception:
             return None

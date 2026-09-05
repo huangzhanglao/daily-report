@@ -1,0 +1,7 @@
+data/
+.workbuddy/
+__pycache__/
+*.pyc
+*.pyo
+.git/
+*.md

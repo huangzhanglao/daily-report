@@ -174,6 +174,11 @@
       <input id="dsTrainBase" type="text" placeholder="如 http://127.0.0.1:8799 （留空则走内置直连，多数服务器环境会被 12306 防火墙拦截降级）">
       <span id="dsTrainStatus" class="hint"></span>
     </div>
+    <div class="field">
+      <label>12306 代理 Token（TRAIN_API_TOKEN，可选）</label>
+      <input id="dsTrainToken" type="password" placeholder="仅当代理端设了 PROXY_TOKEN 时才需要填（两端必须一致）" autocomplete="off">
+      <label style="display:flex;align-items:center;gap:6px;margin-top:6px"><input type="checkbox" id="dsShowTrainToken" style="width:auto"> 显示 Token</label>
+    </div>
   </section>
 </main>
 
@@ -570,6 +575,7 @@
       var s = (res.data && res.data.settings) || {};
       $("dsAmapKey").value = s.amap_web_key || "";
       $("dsTrainBase").value = s.train_api_base || "";
+      $("dsTrainToken").value = s.train_api_token || "";
       if (s.amap_web_key){ $("dsAmapStatus").textContent = "✅ 高德 Key 已配置，实时路线已开启"; }
       else { $("dsAmapStatus").textContent = "⚠️ 未配置高德 Key，路线规划将降级为模型知识"; }
       if (s.train_api_base){ $("dsTrainStatus").textContent = "✅ 12306 代理已配置：" + s.train_api_base; }
@@ -579,13 +585,15 @@
   $("btnSaveDS").onclick = function(){
     api("PUT","/api/admin/settings", {
       amap_web_key: $("dsAmapKey").value.trim(),
-      train_api_base: $("dsTrainBase").value.trim()
+      train_api_base: $("dsTrainBase").value.trim(),
+      train_api_token: $("dsTrainToken").value.trim()
     }).then(function(r){
       if (r.status===200){ toast("已保存，旅游智能体将立即使用新数据源"); loadDatasource(); }
       else toast("保存失败：" + (r.data.error || r.status));
     });
   };
   $("dsShowAmap").onchange = function(){ $("dsAmapKey").type = $("dsShowAmap").checked ? "text" : "password"; };
+  $("dsShowTrainToken").onchange = function(){ $("dsTrainToken").type = $("dsShowTrainToken").checked ? "text" : "password"; };
 
   init();
 })();

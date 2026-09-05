@@ -22,7 +22,7 @@ import re
 import ssl
 import urllib.request
 from datetime import datetime, timedelta
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Header
 from fastapi.responses import JSONResponse
 import uvicorn
 
@@ -38,18 +38,30 @@ STATION_URL = "https://kyfw.12306.cn/otn/resources/js/framework/station_name.js"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 
-# 优先复用本机已安装的 Chrome（无需下载 Playwright 自带的 Chromium）
+# 优先复用本机已安装的 Chrome/Chromium（Windows / Linux 都检测），否则用 Playwright 自带的 Chromium
 import os as _os
-for _cp in (
+_WINDOWS_CHROME = (
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-):
+)
+_LINUX_CHROME = (
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/chromium",
+)
+CHROME_PATH = None
+for _cp in (_WINDOWS_CHROME + _LINUX_CHROME):
     if _os.path.exists(_cp):
         CHROME_PATH = _cp
         break
-else:
-    CHROME_PATH = None
+
+# 可选鉴权：部署到公网节点时设 PROXY_TOKEN，调用方需在查询里带 token（daily-report 的 TRAIN_API_TOKEN 自动带上）
+PROXY_TOKEN = _os.environ.get("PROXY_TOKEN", "").strip()
+# 监听端口（默认 8799，可用 PORT 环境变量覆盖，便于同机多实例或避开占用端口）
+PORT = int(_os.environ.get("PORT", "8799"))
 SEAT_MAP = {21: "商务座", 22: "特等座", 23: "一等包座", 24: "一等座", 25: "二等包座",
             26: "二等座", 27: "高级软卧", 28: "软卧", 29: "动卧", 30: "硬卧",
             31: "软座", 32: "硬座", 33: "无座", 34: "其它"}
@@ -178,7 +190,13 @@ async def query_one(fc: str, tc: str, date: str):
 @app.get("/query")
 async def query(from_: str = Query(..., alias="from"),
                 to: str = Query(..., alias="to"),
-                date: str = Query(...)):
+                date: str = Query(...),
+                token: str = Query(default=""),
+                authorization: str = Header(default="")):
+    if PROXY_TOKEN:
+        ok = (token == PROXY_TOKEN) or authorization.endswith(PROXY_TOKEN)
+        if not ok:
+            return JSONResponse({"error": "unauthorized"}, status_code=401)
     await load_stations()
     fc, tc = code_of(from_), code_of(to)
     if not fc or not tc:
@@ -210,4 +228,4 @@ async def health():
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8799)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)
