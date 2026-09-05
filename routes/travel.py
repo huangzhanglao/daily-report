@@ -25,6 +25,7 @@ import time
 import asyncio
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from core import (
     get_conn, write_lock, uid_now, require_uid,
@@ -353,21 +354,57 @@ async def evaluator(uid: str, plan: dict, itinerary: str, pid: str) -> dict:
 
 
 # ---------------- 编排器：把各 Agent 串成 harness ----------------
-async def run_harness(uid: str, prompt: str, pid: str) -> dict:
+def _sse(event: dict) -> str:
+    """把一个事件字典编码成 SSE 的 data 帧。"""
+    return "data: " + json.dumps(event, ensure_ascii=False) + "\n\n"
+
+
+async def run_harness(uid: str, prompt: str, pid: str, emit=None) -> dict:
+    """运行多智能体 harness。emit 为可选异步回调，用于把阶段进度实时推给前端。
+
+    推送的事件类型：
+      {"type":"stage","step":1..4,"status":"running"|"done","agent":"attractions"|"transport"|"routing"|None,"label":...}
+      {"type":"__end__"}   # harness 全部完成（由调用方用于结束流）
+    """
+    async def stage(step, status, agent=None, label=None):
+        if emit:
+            await emit({"type": "stage", "step": step, "status": status, "agent": agent, "label": label})
+
+    # 1) Planner
+    await stage(1, "running")
     plan = await planner(uid, prompt, pid)
-    # 景点 / 交通两个 Specialist 并行执行；路线编排依赖景点材料，故在景点完成后顺序执行
+    await stage(1, "done")
+
+    # 2) 三个 Specialist：景点 / 交通并行；路线依赖景点材料，在景点完成后顺序执行
+    await stage(2, "running", label="专家并行分析")
+    async def _with_emit(coro, agent):
+        r = await coro
+        await stage(2, "done", agent=agent)
+        return r
     attr, trans = await asyncio.gather(
-        specialist_attractions(uid, plan, pid),
-        specialist_transport(uid, plan, pid),
+        _with_emit(specialist_attractions(uid, plan, pid), "attractions"),
+        _with_emit(specialist_transport(uid, plan, pid), "transport"),
     )
-    route = await specialist_routing(uid, plan, attr.get("text", ""), pid)
+    route = await _with_emit(specialist_routing(uid, plan, attr.get("text", ""), pid), "routing")
+
+    # 3) Synthesizer
+    await stage(3, "running")
     itinerary = await synthesizer(uid, plan, attr, trans, route, pid)
+    await stage(3, "done")
+
+    # 4) Evaluator（校验门控：未通过则最多返工一轮）
+    await stage(4, "running")
     eval_res = await evaluator(uid, plan, itinerary, pid)
-    # 校验门控：未通过则最多返工一轮
+    await stage(4, "done")
     if not eval_res.get("pass"):
         note = "；".join(eval_res.get("issues", []) or []) or "整体不够完整"
+        await stage(4, "running", label="质检未过，返工一轮")
         itinerary = await synthesizer(uid, plan, attr, trans, route, pid, revision_note=note)
         eval_res = await evaluator(uid, plan, itinerary, pid)
+        await stage(4, "done")
+
+    if emit:
+        await emit({"type": "__end__"})
     return {
         "plan": plan,
         "specialists": {
@@ -405,6 +442,50 @@ def _plan_meta(r) -> dict:
     }
 
 
+def _title_of(result: dict, prompt: str) -> str:
+    cities = result["plan"].get("cities") or ["我的行程"]
+    title = " → ".join(cities) if isinstance(cities, list) else str(cities)
+    if not title or title == "我的行程":
+        title = (prompt or "").strip()[:24] or "我的行程"
+    return title
+
+
+def _save_plan(uid: str, prompt: str, result: dict, plan_id: str = None) -> str:
+    """把 harness 结果写入 travel_plans。plan_id 为空则新建。返回 plan_id。"""
+    title = _title_of(result, prompt)
+    now = int(time.time() * 1000)
+
+    def _j(x):
+        return json.dumps(x, ensure_ascii=False)
+
+    with write_lock:
+        conn = get_conn()
+        try:
+            if not plan_id:
+                plan_id = uid_now()
+                conn.execute(
+                    "INSERT INTO travel_plans (id,user_id,title,prompt,plan,attractions,transport,routing,itinerary,evaluation,status,created_at,updated_at) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (plan_id, uid, title, prompt,
+                     _j(result["plan"]), result["specialists"]["attractions"].get("text", ""),
+                     result["specialists"]["transport"].get("text", ""),
+                     result["specialists"]["routing"].get("text", ""),
+                     result["itinerary"], _j(result["evaluation"]), "done", now, now),
+                )
+            else:
+                conn.execute(
+                    "UPDATE travel_plans SET title=?,plan=?,attractions=?,transport=?,routing=?,itinerary=?,evaluation=?,status='done',updated_at=? WHERE id=? AND user_id=?",
+                    (title, _j(result["plan"]), result["specialists"]["attractions"].get("text", ""),
+                     result["specialists"]["transport"].get("text", ""),
+                     result["specialists"]["routing"].get("text", ""),
+                     result["itinerary"], _j(result["evaluation"]), now, plan_id, uid),
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    return plan_id
+
+
 # ---------------- API ----------------
 @router.get("/api/travel/config")
 def travel_config(uid: str = Depends(require_uid)):
@@ -420,35 +501,86 @@ async def travel_generate(body: dict, uid: str = Depends(require_uid)):
     if not prompt:
         raise HTTPException(400, "请描述你的旅行需求")
     result = await run_harness(uid, prompt, pid)
-    title = (result["plan"].get("cities") or ["我的行程"])
-    title = " → ".join(title) if isinstance(title, list) else str(title)
-    if not title or title == "我的行程":
-        title = prompt[:24]
+    plan_id = _save_plan(uid, prompt, result)
+    result["id"] = plan_id
+    result["title"] = _title_of(result, prompt)
+    return {"ok": True, **result}
 
-    now = int(time.time() * 1000)
 
-    def _j(x):
-        return json.dumps(x, ensure_ascii=False)
+def _make_stream(uid: str, prompt: str, pid: str, plan_id: str = None):
+    """构造一个 SSE StreamingResponse：实时推送多智能体各阶段进度，最后推送完整结果。
 
+    plan_id 为空=新建行程；否则在原 id 上覆盖更新（用于 regenerate）。
+    """
+    queue: asyncio.Queue = asyncio.Queue()
+
+    async def emit(ev):
+        await queue.put(ev)
+
+    async def event_gen():
+        task = asyncio.create_task(run_harness(uid, prompt, pid, emit=emit))
+        # 边收边推：直到 harness 结束（task 完成或收到 __end__ 哨兵）
+        while not task.done():
+            try:
+                ev = await asyncio.wait_for(queue.get(), timeout=0.5)
+            except asyncio.TimeoutError:
+                continue
+            if ev.get("type") == "__end__":
+                break
+            yield _sse(ev)
+        # 排空剩余事件
+        while not queue.empty():
+            ev = await queue.get()
+            if ev.get("type") != "__end__":
+                yield _sse(ev)
+        try:
+            result = task.result()  # harness 完成；若中途抛异常会在此重新抛出
+        except HTTPException as e:
+            yield _sse({"type": "error", "message": e.detail})
+            return
+        except Exception as e:
+            yield _sse({"type": "error", "message": str(e)[:300]})
+            return
+        saved_id = _save_plan(uid, prompt, result, plan_id=plan_id)
+        yield _sse({"type": "result", "id": saved_id, "title": _title_of(result, prompt), **result})
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no", "Connection": "keep-alive"},
+    )
+
+
+@router.post("/api/travel/generate_stream")
+async def travel_generate_stream(body: dict, uid: str = Depends(require_uid)):
+    """流式生成：SSE 实时推送多智能体各阶段进度，最后推送完整结果。
+
+    前端用 fetch + ReadableStream 消费（text/event-stream）。
+    事件（每行 data: <json>\\n\\n）：
+      {"type":"stage",...}  阶段进度（见 run_harness）
+      {"type":"result","id":...,"title":...,<harness 结果>}  最终行程
+      {"type":"error","message":...}  出错
+    """
+    prompt = (body.get("prompt") or "").strip()
+    pid = (body.get("provider_id") or "").strip()
+    if not prompt:
+        raise HTTPException(400, "请描述你的旅行需求")
+    return _make_stream(uid, prompt, pid)
+
+
+@router.post("/api/travel/plans/{pid}/regenerate_stream")
+async def travel_regenerate_stream(pid: str, body: dict, uid: str = Depends(require_uid)):
+    """对已有计划重新跑一遍 harness（基于原 prompt），流式推送进度。"""
     with write_lock:
         conn = get_conn()
         try:
-            plan_id = uid_now()
-            conn.execute(
-                "INSERT INTO travel_plans (id,user_id,title,prompt,plan,attractions,transport,routing,itinerary,evaluation,status,created_at,updated_at) "
-                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (plan_id, uid, title, prompt,
-                 _j(result["plan"]), result["specialists"]["attractions"].get("text", ""),
-                 result["specialists"]["transport"].get("text", ""),
-                 result["specialists"]["routing"].get("text", ""),
-                 result["itinerary"], _j(result["evaluation"]), "done", now, now),
-            )
-            conn.commit()
+            r = conn.execute("SELECT * FROM travel_plans WHERE id=? AND user_id=?", (pid, uid)).fetchone()
         finally:
             conn.close()
-    result["id"] = plan_id
-    result["title"] = title
-    return {"ok": True, **result}
+    if not r:
+        raise HTTPException(404, "计划不存在")
+    new_pid = (body.get("provider_id") or "").strip()
+    return _make_stream(uid, r["prompt"], new_pid, plan_id=pid)
 
 
 @router.post("/api/travel/plans/{pid}/regenerate")
@@ -464,24 +596,7 @@ async def travel_regenerate(pid: str, body: dict, uid: str = Depends(require_uid
         raise HTTPException(404, "计划不存在")
     new_pid = (body.get("provider_id") or "").strip()
     result = await run_harness(uid, r["prompt"], new_pid)
-    now = int(time.time() * 1000)
-
-    def _j(x):
-        return json.dumps(x, ensure_ascii=False)
-
-    with write_lock:
-        conn = get_conn()
-        try:
-            conn.execute(
-                "UPDATE travel_plans SET plan=?,attractions=?,transport=?,routing=?,itinerary=?,evaluation=?,status='done',updated_at=? WHERE id=? AND user_id=?",
-                (_j(result["plan"]), result["specialists"]["attractions"].get("text", ""),
-                 result["specialists"]["transport"].get("text", ""),
-                 result["specialists"]["routing"].get("text", ""),
-                 result["itinerary"], _j(result["evaluation"]), now, pid, uid),
-            )
-            conn.commit()
-        finally:
-            conn.close()
+    _save_plan(uid, r["prompt"], result, plan_id=pid)
     result["id"] = pid
     result["title"] = r["title"]
     return {"ok": True, **result}
